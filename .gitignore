@@ -1,0 +1,9 @@
+# Données de l'application : ne jamais les versionner (données sensibles)
+config.json
+admin.json
+gardes.verrou
+sauvegardes/
+garde-*/
+*.pdf
+.DS_Store
+Thumbs.db

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototype phase 1 — Accès au JSON partagé</title>
+<style>
+:root{--fond:#f5f6f8;--carte:#fff;--texte:#1d2430;--doux:#5b6574;--bord:#d3d8e0;--accent:#0b5cad;--ok:#1b7a3d;--ko:#b3261e;--warn:#9a6700}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fond);color:var(--texte);font:15px/1.5 "Segoe UI",system-ui,sans-serif}
+main{max-width:980px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.4rem;margin:0 0 4px}
+h2{font-size:1.05rem;margin:0 0 10px}
+section{background:var(--carte);border:1px solid var(--bord);border-radius:6px;padding:14px 16px;margin:14px 0}
+.sub{color:var(--doux);margin:0 0 8px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+label{display:inline-flex;gap:6px;align-items:center}
+input[type=text],input[type=number],select{font:inherit;padding:6px 8px;border:1px solid var(--bord);border-radius:4px;background:#fff;color:inherit}
+input[type=text]{min-width:220px}
+input[type=number]{width:80px}
+button{font:inherit;padding:7px 12px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:4px;cursor:pointer}
+button.sec{background:#fff;color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:3px solid #f2a900;outline-offset:2px}
+pre{margin:8px 0 0;padding:10px;background:#101722;color:#e6edf6;border-radius:4px;overflow:auto;max-height:260px;font:12.5px/1.45 Consolas,monospace;white-space:pre-wrap}
+#log{max-height:340px}
+table{border-collapse:collapse;width:100%}
+td{padding:3px 8px 3px 0;vertical-align:top}
+td:first-child{color:var(--doux);width:210px}
+.ok{color:var(--ok);font-weight:600}.ko{color:var(--ko);font-weight:600}.warn{color:var(--warn);font-weight:600}
+#alerte{display:none;margin:8px 0;padding:10px 12px;border-left:5px solid var(--ko);background:#fdecea;color:#5f1511}
+ol{margin:6px 0 0;padding-left:20px}li{margin:3px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>Prototype phase 1 — accès au JSON partagé</h1>
+<p class="sub">Page de test technique. Elle écrit uniquement dans le dossier choisi (fichier <code>prototype-gardes.json</code>, sous-dossier <code>sauvegardes</code>, fichier <code>.verrou</code>). Aucune donnée réelle. Aucun accès Internet.</p>
+
+<section aria-labelledby="t-env">
+  <h2 id="t-env">1. Environnement</h2>
+  <table><tbody id="env"></tbody></table>
+</section>
+
+<section aria-labelledby="t-dossier">
+  <h2 id="t-dossier">2. Dossier partagé et poste</h2>
+  <div class="row">
+    <label>Nom du poste <input type="text" id="poste" placeholder="ex. Poste A"></label>
+  </div>
+  <div class="row">
+    <button id="pick">Choisir le dossier partagé</button>
+    <button id="resume" class="sec" disabled>Reprendre le dossier précédent</button>
+  </div>
+  <p class="sub">« Reprendre » teste la persistance après fermeture et réouverture d’Edge : la permission est-elle conservée ou redemandée ?</p>
+  <table><tbody id="info"></tbody></table>
+</section>
+
+<section aria-labelledby="t-rw">
+  <h2 id="t-rw">3. Lecture, modification, enregistrement</h2>
+  <div id="alerte" role="alert"></div>
+  <div class="row">
+    <label>Valeur de test <input type="text" id="valeur" data-loaded=""></label>
+    <label>Mode d’écriture
+      <select id="mode">
+        <option value="detect">Avec détection de conflit</option>
+        <option value="lock">Détection + verrou</option>
+        <option value="none">Sans protection (test témoin)</option>
+      </select>
+    </label>
+  </div>
+  <div class="row">
+    <button id="save" disabled>Enregistrer</button>
+    <button id="reload" class="sec" disabled>Recharger le fichier</button>
+    <button id="reset" class="sec" disabled>Remettre le compteur à 0</button>
+    <label><input type="checkbox" id="bk" checked> Copie datée après enregistrement</label>
+  </div>
+  <pre id="content" aria-label="Contenu du fichier JSON">(aucun fichier chargé)</pre>
+</section>
+
+<section aria-labelledby="t-stress">
+  <h2 id="t-stress">4. Test de concurrence (deux postes en même temps)</h2>
+  <p class="sub">Chaque cycle relit le fichier, ajoute 1 au compteur et réécrit, selon le mode choisi ci-dessus. Lancez le test sur les deux postes au même moment. Si aucune mise à jour n’est perdue : compteur final = compteur de départ + écritures réussies du poste A + écritures réussies du poste B.</p>
+  <div class="row">
+    <label>Cycles <input type="number" id="n" value="30" min="1" max="500"></label>
+    <button id="stress" disabled>Lancer le test</button>
+    <button id="stop" class="sec" disabled>Arrêter</button>
+  </div>
+  <div id="res" class="sub">—</div>
+</section>
+
+<section aria-labelledby="t-log">
+  <h2 id="t-log">5. Journal technique</h2>
+  <div class="row">
+    <button id="copy" class="sec">Copier le journal</button>
+    <button id="clear" class="sec">Effacer</button>
+  </div>
+  <pre id="log" role="log" aria-live="polite"></pre>
+</section>
+
+<section aria-labelledby="t-plan">
+  <h2 id="t-plan">Scénarios à exécuter et à noter</h2>
+  <ol>
+    <li>Poste A seul : choisir le dossier, modifier la valeur, enregistrer, vérifier « Relecture identique » et la copie dans <code>sauvegardes</code>.</li>
+    <li>Fermer Edge, le rouvrir, cliquer « Reprendre » : noter si la permission est conservée ou redemandée.</li>
+    <li>Postes A et B sur le même dossier : A enregistre, B voit « modification externe détectée » sous 3 secondes.</li>
+    <li>Conflit : A et B chargent, A enregistre, puis B enregistre. B doit recevoir un conflit sans perdre sa saisie.</li>
+    <li>Concurrence : remettre le compteur à 0, lancer le test sur les deux postes, en mode « sans protection », puis « avec détection », puis « avec verrou ». Noter les résultats de chaque mode.</li>
+    <li>Tester depuis la page ouverte en local, puis depuis le lecteur réseau (si Edge le permet).</li>
+  </ol>
+</section>
+</main>
+
+<script>
+'use strict';
+const FILE = 'prototype-gardes.json', LOCK = 'prototype-gardes.verrou', BK = 'sauvegardes';
+const $ = id => document.getElementById(id);
+const me = Math.random().toString(36).slice(2, 8);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let dir = null, fh = null, lastText = null, busy = false, stopReq = false;
+const poste = () => $('poste').value.trim() || ('poste-' + me);
+
+function log(msg) {
+  const d = new Date(), p = (n, l = 2) => String(n).padStart(l, '0');
+  const t = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+  const el = $('log'); el.textContent += `[${t}] ${msg}\n`; el.scrollTop = el.scrollHeight;
+}
+function alerte(msg) { const a = $('alerte'); a.textContent = msg || ''; a.style.display = msg ? 'block' : 'none'; }
+function ligne(tbody, k, v, cls) {
+  const tr = document.createElement('tr'), a = document.createElement('td'), b = document.createElement('td');
+  a.textContent = k; b.textContent = v; if (cls) b.className = cls; tr.append(a, b); tbody.appendChild(tr);
+}
+
+/* ---- Persistance du dossier (IndexedDB) ---- */
+const idb = () => new Promise((res, rej) => { const r = indexedDB.open('proto-gardes', 1); r.onupgradeneeded = () => r.result.createObjectStore('h'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+async function idbGet(k) { const db = await idb(); return new Promise((res, rej) => { const q = db.transaction('h').objectStore('h').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
+async function idbSet(k, v) { const db = await idb(); return new Promise((res, rej) => { const t = db.transaction('h', 'readwrite'); t.objectStore('h').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); }
+
+/* ---- Accès fichier (module isolé, remplaçable) ---- */
+async function readFile() { const f = await fh.getFile(); const t = await f.text(); return { t, mod: f.lastModified, size: f.size }; }
+async function writeTxt(txt, handle = fh) { const w = await handle.createWritable(); await w.write(txt); await w.close(); }
+const initial = () => ({ schema_version: 1, rev: 0, compteur: 0, valeur: '', dernier_poste: '', modifie_le: '', journal: [] });
+
+async function readLock() { try { const f = await (await dir.getFileHandle(LOCK)).getFile(); return JSON.parse(await f.text()); } catch (e) { return null; } }
+async function acquireLock() {
+  for (let i = 0; i < 50; i++) {
+    const l = await readLock();
+    if (!l || l.exp < Date.now() || l.owner === me) {
+      const h = await dir.getFileHandle(LOCK, { create: true });
+      await writeTxt(JSON.stringify({ owner: me, poste: poste(), exp: Date.now() + 8000 }), h);
+      await sleep(150);
+      const c = await readLock();
+      if (c && c.owner === me) return true;
+    }
+    await sleep(80 + Math.random() * 120);
+  }
+  return false;
+}
+async function releaseLock() { try { const l = await readLock(); if (l && l.owner === me) await dir.removeEntry(LOCK); } catch (e) { log('Libération du verrou : ' + e.message); } }
+
+async function backup(txt) {
+  const b = await dir.getDirectoryHandle(BK, { create: true });
+  const nom = new Date().toISOString().replace(/[:.]/g, '-') + '_' + poste().replace(/\W/g, '') + '.json';
+  await writeTxt(txt, await b.getFileHandle(nom, { create: true }));
+  return nom;
+}
+
+/* ---- Lecture / affichage ---- */
+function afficher(r, j) {
+  const t = $('info'); t.textContent = '';
+  ligne(t, 'Dossier', dir.name);
+  ligne(t, 'Fichier', FILE + ' — ' + r.size + ' octets');
+  ligne(t, 'Dernière modification', new Date(r.mod).toLocaleString('fr-CH'));
+  if (j) {
+    ligne(t, 'Révision / compteur', `${j.rev} / ${j.compteur}`);
+    ligne(t, 'Dernier poste', j.dernier_poste || '—');
+  }
+  $('content').textContent = r.t;
+}
+async function reload(pourquoi, garderSaisie) {
+  const r = await readFile(); let j;
+  try { j = JSON.parse(r.t); }
+  catch (e) { log('JSON INVALIDE — écriture bloquée : ' + e.message); $('save').disabled = true; afficher(r, null); alerte('Le fichier JSON est invalide. Aucune écriture n’est autorisée.'); return null; }
+  lastText = r.t; afficher(r, j); $('save').disabled = false;
+  const v = $('valeur'); v.dataset.loaded = j.valeur; if (!garderSaisie) v.value = j.valeur;
+  log(`Lecture (${pourquoi}) : rev ${j.rev}, compteur ${j.compteur}, ${r.size} octets`);
+  return j;
+}
+
+async function useDir(d) {
+  dir = d;
+  try { fh = await dir.getFileHandle(FILE); }
+  catch (e) {
+    if (e.name !== 'NotFoundError') throw e;
+    fh = await dir.getFileHandle(FILE, { create: true });
+    await writeTxt(JSON.stringify(initial(), null, 2));
+    log('Fichier de test créé.');
+  }
+  if (await reload('ouverture')) {
+    ['reload', 'reset', 'stress'].forEach(i => $(i).disabled = false);
+    log('Dossier prêt : ' + dir.name);
+  }
+}
+
+/* ---- Un cycle lecture / modification / écriture ---- */
+async function cycle(mode, valeur, fresh) {
+  let locked = false;
+  try {
+    if (mode === 'lock') { if (!await acquireLock()) return 'verrou'; locked = true; }
+    if (fresh) await reload('cycle');
+    if (!lastText) return 'erreur';
+    const base = JSON.parse(lastText);
+    if (fresh) await sleep(Math.random() * 60);
+    if (mode !== 'none') { const r = await readFile(); if (r.t !== lastText) return 'conflit'; }
+    const n = { ...base, rev: base.rev + 1, compteur: base.compteur + 1, valeur, dernier_poste: poste(), modifie_le: new Date().toISOString() };
+    n.journal = [...(base.journal || []), { rev: n.rev, poste: poste(), le: n.modifie_le }].slice(-15);
+    const txt = JSON.stringify(n, null, 2);
+    await writeTxt(txt); lastText = txt; cycle.dernier = txt;
+    return 'ok';
+  } catch (e) { log('Erreur : ' + e.name + ' — ' + e.message); return 'erreur'; }
+  finally { if (locked) await releaseLock(); }
+}
+
+/* ---- Enregistrement manuel ---- */
+$('save').onclick = async () => {
+  if (busy) return; busy = true; $('save').disabled = true; alerte('');
+  const mode = $('mode').value, valeur = $('valeur').value, t0 = performance.now();
+  log(`Enregistrement demandé (mode ${mode}, valeur « ${valeur} »)`);
+  const res = await cycle(mode, valeur, false);
+  const ms = Math.round(performance.now() - t0);
+  if (res === 'ok') {
+    log(`Enregistrement confirmé en ${ms} ms`);
+    const r = await readFile();
+    log(r.t === cycle.dernier ? 'Relecture identique : OK' : 'ATTENTION : la relecture diffère de ce qui a été écrit');
+    await reload('après enregistrement');
+    if ($('bk').checked) { try { log('Copie datée créée : ' + await backup(r.t)); } catch (e) { log('ÉCHEC de la copie datée : ' + e.name + ' — ' + e.message); alerte('Enregistrement réussi, mais la copie datée a échoué.'); } }
+  } else if (res === 'conflit') {
+    log('CONFLIT : le fichier a changé depuis votre lecture. Écriture annulée.');
+    alerte('Conflit détecté : un autre poste a modifié le fichier. Votre saisie est conservée dans le champ. Les données les plus récentes ont été rechargées.');
+    await reload('après conflit', true);
+  } else if (res === 'verrou') {
+    log('Verrou non obtenu : écriture annulée.'); alerte('Le fichier est verrouillé par un autre poste. Réessayez dans quelques secondes.');
+  } else { alerte('Enregistrement échoué. Voir le journal technique. Votre saisie est conservée.'); }
+  busy = false; $('save').disabled = false;
+};
+$('reload').onclick = async () => { if (!busy) { alerte(''); await reload('manuel'); } };
+$('reset').onclick = async () => {
+  if (busy || !confirm('Remettre le compteur et le journal à zéro ?')) return;
+  busy = true;
+  try { const b = JSON.parse(lastText); await writeTxt(JSON.stringify({ ...b, compteur: 0, journal: [], rev: b.rev + 1 }, null, 2)); await reload('remise à zéro'); }
+  catch (e) { log('Erreur : ' + e.message); }
+  busy = false;
+};
+
+/* ---- Test de concurrence ---- */
+$('stress').onclick = async () => {
+  if (busy) return; busy = true; stopReq = false; alerte('');
+  $('stress').disabled = true; $('stop').disabled = false;
+  const mode = $('mode').value, N = Math.max(1, +$('n').value || 30);
+  const c = { ok: 0, conflit: 0, verrou: 0, erreur: 0 };
+  await reload('départ du test'); const dep = JSON.parse(lastText).compteur;
+  log(`TEST DE CONCURRENCE — ${poste()} — mode ${mode} — ${N} cycles — compteur de départ ${dep}`);
+  const t0 = performance.now();
+  for (let i = 0; i < N && !stopReq; i++) {
+    c[await cycle(mode, 'test-' + poste(), true)]++;
+    $('res').textContent = `Cycle ${i + 1}/${N} — réussies : ${c.ok} — conflits : ${c.conflit} — verrou refusé : ${c.verrou} — erreurs : ${c.erreur}`;
+    await sleep(30 + Math.random() * 120);
+  }
+  await sleep(500); await reload('fin du test');
+  const fin = JSON.parse(lastText).compteur, s = Math.round((performance.now() - t0) / 1000);
+  log(`FIN — ${poste()} : réussies ${c.ok}, conflits ${c.conflit}, verrou refusé ${c.verrou}, erreurs ${c.erreur}, ${s} s. Compteur final lu : ${fin}. Contrôle : départ ${dep} + réussies de ce poste ${c.ok} = ${dep + c.ok} (à additionner avec l’autre poste).`);
+  $('res').textContent += ` — compteur final : ${fin} (départ ${dep})`;
+  busy = false; $('stress').disabled = false; $('stop').disabled = true;
+};
+$('stop').onclick = () => { stopReq = true; };
+
+/* ---- Détection de modification externe ---- */
+setInterval(async () => {
+  if (!fh || busy) return;
+  try {
+    const r = await readFile();
+    if (r.t === lastText) return;
+    const v = $('valeur');
+    if (v.value !== v.dataset.loaded) { alerte('Le fichier a été modifié par un autre poste. Votre saisie en cours est conservée : enregistrez pour voir le contrôle de conflit.'); log('Modification externe détectée (saisie locale en attente : pas de rechargement).'); }
+    else { await reload('modification externe détectée'); alerte('Le fichier a été modifié par un autre poste et rechargé.'); }
+  } catch (e) { log('Sondage en erreur : ' + e.name + ' — ' + e.message); }
+}, 3000);
+
+/* ---- Démarrage ---- */
+$('pick').onclick = async () => {
+  try {
+    const d = await window.showDirectoryPicker({ id: 'gardes', mode: 'readwrite' });
+    try { await idbSet('dir', d); $('resume').disabled = false; } catch (e) { log('Mémorisation du dossier impossible : ' + e.message); }
+    await useDir(d);
+  } catch (e) { log('Sélection : ' + e.name + ' — ' + e.message); }
+};
+$('resume').onclick = async () => {
+  try {
+    const h = await idbGet('dir'); if (!h) { log('Aucun dossier mémorisé.'); return; }
+    let p = await h.queryPermission({ mode: 'readwrite' }); log('Permission mémorisée : ' + p);
+    if (p !== 'granted') { p = await h.requestPermission({ mode: 'readwrite' }); log('Après demande : ' + p); }
+    if (p === 'granted') await useDir(h);
+  } catch (e) { log('Reprise : ' + e.name + ' — ' + e.message); }
+};
+$('copy').onclick = async () => { try { await navigator.clipboard.writeText($('log').textContent); log('Journal copié.'); } catch (e) { log('Copie impossible : ' + e.message); } };
+$('clear').onclick = () => { $('log').textContent = ''; };
+$('poste').value = (() => { try { return localStorage.getItem('poste') || ''; } catch (e) { return ''; } })();
+$('poste').onchange = () => { try { localStorage.setItem('poste', $('poste').value.trim()); } catch (e) {} };
+
+(async () => {
+  const e = $('env'), api = 'showDirectoryPicker' in window;
+  ligne(e, 'Adresse de la page', location.protocol + '//' + (location.pathname || ''));
+  ligne(e, 'Contexte sécurisé', String(window.isSecureContext), window.isSecureContext ? 'ok' : 'ko');
+  ligne(e, 'Accès aux dossiers (File System Access)', api ? 'disponible' : 'INDISPONIBLE', api ? 'ok' : 'ko');
+  ligne(e, 'Navigateur', navigator.userAgent.match(/Edg\/[\d.]+/)?.[0] || navigator.userAgent.slice(0, 80));
+  if (!api) { $('pick').disabled = true; log('showDirectoryPicker absent : ce navigateur ou cette politique ne permet pas l’accès direct aux fichiers.'); }
+  try {
+    const h = await idbGet('dir');
+    if (h) { $('resume').disabled = false; log(`Dossier mémorisé : ${h.name} — permission : ${await h.queryPermission({ mode: 'readwrite' })}`); }
+    else log('Aucun dossier mémorisé.');
+  } catch (err) { log('IndexedDB indisponible : ' + err.message); }
+})();
+</script>
+</body>
+</html>

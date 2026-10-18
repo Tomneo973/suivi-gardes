@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suivi des gardes</title>
+<style>
+:root{--b:#0b5cad;--t:#1d2430;--g:#5b6574;--l:#d3d8e0;--bg:#f4f5f7}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 "Segoe UI",system-ui,sans-serif;color:var(--t);background:var(--bg)}
+header{background:#fff;border-bottom:1px solid var(--l);padding:8px 14px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+h1{font-size:1.1rem;margin:0}h2{font-size:1.05rem;margin:0 0 8px}h3{font-size:.95rem;margin:12px 0 4px}
+.m{color:var(--g);font-size:12px}.er{color:#b3261e}
+#st{font-weight:600;padding:2px 8px;border-radius:10px;background:#eee}
+#st.o{background:#dff3e4;color:#1b7a3d}#st.w{background:#fff3cd;color:#7a5a00}#st.k{background:#fdecea;color:#b3261e}
+nav{display:flex;gap:2px;padding:0 14px;background:#fff;border-bottom:1px solid var(--l);overflow:auto}
+nav button{background:none;color:var(--t);border:0;border-bottom:3px solid transparent;border-radius:0;padding:9px 12px}
+nav button.on{border-color:var(--b);font-weight:600}
+button{font:inherit;padding:5px 10px;border:1px solid var(--b);background:var(--b);color:#fff;border-radius:4px;cursor:pointer}
+button.s{background:#fff;color:var(--b)}button.x{background:#b3261e;border-color:#b3261e}
+:focus-visible{outline:3px solid #f2a900;outline-offset:2px}
+input,select,textarea{font:inherit;padding:4px 6px;border:1px solid var(--l);border-radius:4px;background:#fff;color:inherit}
+#err{display:none;margin:8px 14px 0;padding:8px 12px;border-left:5px solid #b3261e;background:#fdecea}
+#app{display:grid;grid-template-columns:minmax(0,1fr) 380px;column-gap:12px;padding:12px 34px 12px 14px;transition:grid-template-columns .25s ease,column-gap .25s ease}
+#app aside{min-width:0;overflow:hidden}#app.nopan{grid-template-columns:minmax(0,1fr) 0px;column-gap:0}#app.nopan aside{visibility:hidden}
+#pan{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:5;width:24px;height:72px;padding:0;font-size:16px;border-radius:6px 0 0 6px}
+@media(max-width:1000px){#app,#app.nopan{grid-template-columns:1fr;column-gap:0;row-gap:12px}#app.nopan aside{display:none}}
+.c{background:#fff;border:1px solid var(--l);border-radius:6px;padding:12px;margin-bottom:12px}
+table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--l);vertical-align:top}
+th[data-a]{cursor:pointer}tr[data-a]{cursor:pointer}tr[data-a]:hover{background:#eef3fa}
+.chip{font-size:11px;padding:1px 7px;border-radius:9px;background:#e6e9ee;font-weight:600;white-space:nowrap}
+.chip.en_cours{background:#dbeafe;color:#124a9c}.chip.a_traiter{background:#ffe9c2;color:#7a4a00}.chip.traitee{background:#dff3e4;color:#1b7a3d}
+.kpi{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin:10px 0}
+.kpi div{border:1px solid var(--l);border-radius:6px;padding:8px;background:#fff}.kpi b{display:block;font-size:1.4rem}
+.gw{position:relative}.gr{display:flex;height:50px;border-top:1px solid var(--l);cursor:pointer}
+.gl{width:170px;font-size:12px;padding:3px 6px 0 0;overflow:hidden}
+.gt{position:relative;flex:1;background:repeating-linear-gradient(90deg,#bcc4cf 0 1px,transparent 1px 4.16667%),repeating-linear-gradient(90deg,#e7eaef 0 1px,transparent 1px 1.04167%)}
+.gh{display:flex;font-size:11px;color:var(--g)}.gh span{width:4.1667%}
+.gb{position:absolute;top:6px;height:34px;border-radius:5px;color:#fff;font-size:12px;font-weight:600;padding:8px 7px;overflow:hidden;white-space:nowrap}
+.sg{position:absolute;top:26px;height:6px;border-radius:3px;background:#8aa0bd}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}.gr.sub{height:30px;cursor:default;background:#fafbfc}.gr.sub .gb{top:4px;height:22px;font-size:11px;font-weight:400;padding:3px 5px;border-radius:4px}
+.gb.main{top:7px;height:36px;display:flex;align-items:center;justify-content:center;padding:0 10px;font-size:13px;font-weight:600;line-height:1}
+.gb.main .t,.gx .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}.kk{font-weight:400;font-size:11px;opacity:.85;margin-right:4px}.ss{opacity:.55;margin:0 9px}
+.gx{position:absolute;top:7px;height:36px;display:flex;align-items:center;padding:0 10px;border-radius:5px;color:#fff;font-size:13px;font-weight:600;overflow:hidden;box-shadow:0 0 0 2px #fff;z-index:1}svg text{font-size:10px;fill:#5b6574}
+.now{position:absolute;top:0;bottom:0;width:2px;background:#d00;z-index:2}
+.sv2{border:1px solid var(--l);border-radius:5px;padding:6px 8px;margin:6px 0}.sv2 ul{margin:4px 0;padding-left:18px}
+.wn{background:#fff3cd;padding:6px 8px;border-radius:4px;margin:6px 0;font-size:12px}
+dialog{border:1px solid var(--l);border-radius:8px;min-width:340px;max-width:92vw}
+dialog label{display:block;margin:7px 0}dialog input,dialog select,dialog textarea{width:100%}dialog input[type=checkbox]{width:auto;margin-right:8px}
+.fl{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:end;margin-bottom:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Suivi des gardes</h1>
+  <span id="st">Non connecté</span>
+  <span class="m" id="sync">Synchronisation : —</span>
+  <span class="m" id="bk">Dernière sauvegarde : —</span>
+  <span style="flex:1"></span>
+  <label class="m">Utilisateur <input id="user" size="14" placeholder="Votre nom"></label>
+  <label class="m">Profil <select id="role"><option>Administrateur</option><option>Opérateur</option><option>Consultation</option></select></label>
+</header>
+<nav id="nav">
+  <button data-a="go" data-v="dash">Tableau de bord</button>
+  <button data-a="go" data-v="cours">Gardes en cours <span id="n1"></span></button>
+  <button data-a="go" data-v="traiter">À traiter <span id="n2"></span></button>
+  <button data-a="go" data-v="hist">Historique</button>
+  <button data-a="go" data-v="admin" id="tadm">Administration</button>
+</nav>
+<div id="err" role="alert"></div>
+<main id="app"></main>
+<button id="pan" data-a="pan" aria-expanded="true" aria-label="Masquer le panneau de détail" title="Masquer / afficher le panneau de détail">»</button>
+<dialog id="dlg"></dialog>
+
+<script>
+'use strict';
+const $=id=>document.getElementById(id),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid=()=>'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),me=uid();
+const P=n=>String(n).padStart(2,'0'),ymd=d=>d.getFullYear()+'-'+P(d.getMonth()+1)+'-'+P(d.getDate());
+const T=i=>i?+new Date(i):NaN,tm=i=>i?P(new Date(i).getHours())+':'+P(new Date(i).getMinutes()):'—';
+const fmt=i=>{if(!i)return'—';const d=new Date(i);return P(d.getDate())+'.'+P(d.getMonth()+1)+'.'+d.getFullYear()+' '+tm(i)};
+const toL=i=>{if(!i)return'';const d=new Date(i);return ymd(d)+'T'+tm(i)},toI=l=>l?new Date(l).toISOString():'';
+const LBL={en_cours:'En cours',a_traiter:'Terminée — à traiter',traitee:'Traitée'};
+const ls=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k)||'';localStorage.setItem(k,v)}catch(e){return''}};
+const S={view:'dash',sel:null,pan:ls('gpan')!=='0',gs:'type',all:false,admin:null,open:new Set(),cday:ymd(new Date()),cmon:ymd(new Date()).slice(0,7),day:ymd(new Date()),grp:'mois',f:{},h:{},sort:{k:'debut',d:-1},user:ls('gu'),role:(ls('gr')==='Administrateur'?'':ls('gr'))||'Opérateur'};
+let D=null,C=null,dir=null,busy=false;const MO={};
+const rw=()=>S.role!=='Consultation',adm=()=>S.role==='Administrateur',canEdit=g=>adm()||(rw()&&g.statut!=='traitee');
+const G=(d,id)=>d.gardes.find(g=>g.id===id),AN=a=>a||'?',isPq=a=>a.piquet===true||a.mode==='piquet';
+const PAL=['#e07b00','#8a3ffc','#c2185b','#00838f'];
+const tc=t=>{const x=C?.types.find(z=>z.nom===t);if(x)return x.couleur;const l=(t||'').toLowerCase();return/d[ée]tenu/.test(l)?'#1f6fd6':/patient/.test(l)?'#2e9e4f':PAL[[...l].reduce((a,c)=>a+c.charCodeAt(0),0)%PAL.length]};
+const TN=()=>C.types.map(t=>t.nom),hor=t=>{const x=C?.services.find(z=>z.nom===t);return x&&x.debut&&x.fin?[x.debut,x.fin]:[]},sc=t=>C?.services.find(z=>z.nom===t)?.couleur||'#6b7a90';
+const rank=t=>{const i=(C?.services||[]).findIndex(z=>z.nom===t);return i<0?99:i};
+const hrs=(t,a,b)=>{const h=hor(t);a=a||h[0];b=b||h[1];if(!a||!b)throw new Error('Heures de début et de fin requises pour ce service.');return[a,b]};
+const mk=(dy,a,b)=>{const s=new Date(dy+'T'+a),e=new Date(dy+'T'+(b==='24:00'?'00:00':b));if(b==='24:00'||e<=s)e.setDate(e.getDate()+1);return[s.toISOString(),e.toISOString()]};
+const dot=t=>`<i class="dot" style="background:${tc(t)}"></i>`;
+const ref=g=>S.role==='Consultation'?g.numero:(g.personne||g.numero);
+/* La durée de la garde découle de ses services */
+function recalc(g){const A=g.services.flatMap(s=>s.aff);if(!A.length)return;const I=x=>new Date(x).toISOString();
+  g.fin_prevue=I(Math.max(...A.map(a=>T(a.fin))));if(g.statut!=='en_cours')g.fin_reel=I(Math.max(...A.map(a=>T(a.fin_reel||a.fin))))}
+
+/* ===== Accès aux fichiers (module isolé) =====
+   config.json (types, services, couleurs) · <type>/AAAA-MM.json (gardes d'un type pour un mois) · admin.json (comptes) · sauvegardes/ */
+const FILE='config.json',LOCK='gardes.verrou',BK='sauvegardes';
+const wr=async(t,h)=>{const w=await h.createWritable();await w.write(t);await w.close()};
+const slug=n=>n.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'type';
+const kOf=(ty,iso)=>(C.types.find(t=>t.nom===ty)?.dossier||slug(ty))+'/'+ymd(new Date(T(iso))).slice(0,7);
+const idb=()=>new Promise((s,j)=>{const r=indexedDB.open('suivi-gardes',1);r.onupgradeneeded=()=>r.result.createObjectStore('h');r.onsuccess=()=>s(r.result);r.onerror=()=>j(r.error)});
+const idbGet=async k=>{const db=await idb();return new Promise((s,j)=>{const q=db.transaction('h').objectStore('h').get(k);q.onsuccess=()=>s(q.result);q.onerror=()=>j(q.error)})};
+const idbSet=async(k,v)=>{const db=await idb();return new Promise((s,j)=>{const t=db.transaction('h','readwrite');t.objectStore('h').put(v,k);t.oncomplete=s;t.onerror=()=>j(t.error)})};
+const rdLock=async()=>{try{return JSON.parse(await(await(await dir.getFileHandle(LOCK)).getFile()).text())}catch(e){return null}};
+async function lock(){for(let i=0;i<40;i++){const l=await rdLock();
+  if(!l||l.exp<Date.now()||l.owner===me){await wr(JSON.stringify({owner:me,user:S.user,exp:Date.now()+8000}),await dir.getFileHandle(LOCK,{create:true}));await sleep(150);const c=await rdLock();if(c&&c.owner===me)return true}
+  await sleep(80+Math.random()*120)}return false}
+async function unlock(){try{const l=await rdLock();if(l&&l.owner===me)await dir.removeEntry(LOCK)}catch(e){}}
+async function backup(t,key){const b=await dir.getDirectoryHandle(BK,{create:true});
+  await wr(t,await b.getFileHandle(new Date().toISOString().replace(/[:.]/g,'-')+'_'+(key==='@cfg'?'config':key.replace('/','_'))+'.json',{create:true}));
+  const n=[];for await(const[k]of b.entries())n.push(k);n.sort();while(n.length>150)await b.removeEntry(n.shift())}
+function validate(d){
+  if(d.schema_version!==1)throw new Error('Version de schéma inconnue : '+d.schema_version);
+  if(!d.gardes)return;const ids=new Set(),u=i=>{if(ids.has(i))throw new Error('Identifiant en double : '+i);ids.add(i)};
+  for(const g of d.gardes){u(g.id);for(const s of g.services){u(s.id);for(const a of s.aff)u(a.id)}}
+}
+const conflit=()=>Object.assign(new Error('Conflit : cette garde a été modifiée par un autre poste. Les données ont été rechargées. Vérifiez puis réessayez ; vos saisies restent dans le formulaire.'),{conflit:true});
+const setSt=(t,c)=>{const e=$('st');e.textContent=t;e.className=c||''};
+const sync=()=>$('sync').textContent='Synchronisation : '+tm(new Date());
+const showErr=e=>{console.error(e);const x=$('err');x.textContent=e.message;x.style.display='block'};
+
+/* Écriture sérialisée : verrou → relecture des fichiers concernés → modification → validation → écriture → relecture de contrôle → copies datées */
+async function commit(fn){
+  if(!dir||!D)throw new Error('Aucun dossier connecté.');
+  setSt('Enregistrement en cours…','w');busy=true;let lk=false;const E=new Map();
+  const open=async key=>{if(E.has(key))return E.get(key).data;let h,init=null;
+    if(key==='@cfg')h=MO['@cfg'].h;
+    else{const[dos,mo]=key.split('/');h=await(await dir.getDirectoryHandle(dos,{create:true})).getFileHandle(mo+'.json',{create:true});
+      init={schema_version:1,type:C.types.find(t=>t.dossier===dos)?.nom||dos,mois:mo,rev:0,gardes:[],audit:[]}}
+    const t=await(await h.getFile()).text();let data;
+    if(!t.trim()&&init)data=init;else try{data=JSON.parse(t)}catch(e){throw new Error('Fichier JSON invalide ('+key+') : écriture bloquée.')}
+    E.set(key,{key,h,data});return data};
+  try{
+    if(!await lock())throw new Error('Fichiers verrouillés par un autre poste. Réessayez dans quelques secondes.');lk=true;
+    const a=await fn({file:open,cfg:()=>open('@cfg')}),L=[...E.values()],main=a.cfg?E.get('@cfg'):L.find(e=>e.key!=='@cfg');
+    main.data.audit.push({id:uid(),le:new Date().toISOString(),user:S.user||'(non renseigné)',role:S.role,action:a.action,objet:a.objet,details:a.details});
+    for(const e of L){validate(e.data);e.data.rev=(e.data.rev||0)+1}
+    for(const e of[...L].reverse()){e.out=JSON.stringify(e.data,null,1);await wr(e.out,e.h)}
+    for(const e of L)if((await(await e.h.getFile()).text())!==e.out)throw new Error('Relecture différente : enregistrement non confirmé.');
+    L.forEach(e=>{MO[e.key]={h:e.h,t:e.out,data:e.data}});rebuild();setSt('Enregistrement confirmé','o');sync();$('err').style.display='none';
+    try{for(const e of L)await backup(e.out,e.key);$('bk').textContent='Dernière sauvegarde : '+tm(new Date())}catch(e){$('bk').textContent='ÉCHEC sauvegarde : '+e.message}
+  }catch(e){setSt(e.conflit?'Conflit détecté':'Enregistrement échoué','k');if(e.conflit)try{await pollOnce(1)}catch(x){}throw e}
+  finally{if(lk)await unlock();busy=false}
+  render();
+}
+const upd=(id,v0,fn)=>{const g=D.gardes.find(z=>z.id===id);if(!g)throw new Error('Garde introuvable.');
+  return commit(async ctx=>{const d=await ctx.file(g._k),x=G(d,id);if(!x)throw new Error('Garde introuvable (supprimée par un autre poste ?).');if(x.v!==v0)throw conflit();const r=fn(x,d);recalc(x);x.v++;return r})};
+
+/* Mois à charger : mois courant et précédent, plus ceux demandés par les filtres */
+function wanted(){const s=new Set(),cur=ymd(new Date()).slice(0,7);
+  const rng=(a,b)=>{a=(a||b||'').slice(0,7);b=(b||a).slice(0,7);if(!a)return;let[y,m]=a.split('-').map(Number);for(let i=0;i<60;i++){const k=y+'-'+P(m);s.add(k);if(k>=b)break;if(++m>12){m=1;y++}}};
+  const pm=d=>{const x=new Date((d||ymd(new Date())).slice(0,7)+'-01T00:00');x.setMonth(x.getMonth()-1);return ymd(x).slice(0,7)};
+  rng(pm(),cur);rng(S.f.du,S.f.du?(S.f.au||cur):S.f.au);rng(S.h.du,S.h.du?(S.h.au||cur):S.h.au);rng(S.cmon);rng(pm(S.cday),S.cday);rng(pm(S.day),S.day);return s}
+async function loadWindow(){let ch=false;const want=wanted();
+  for(const t of C.types){let dh;try{dh=await dir.getDirectoryHandle(t.dossier)}catch(e){continue}
+    let ms=[...want];if(S.all){ms=[];for await(const[n]of dh.entries())if(/^\d{4}-\d\d\.json$/.test(n))ms.push(n.slice(0,7))}
+    for(const mo of ms){const k=t.dossier+'/'+mo;if(MO[k])continue;let h;try{h=await dh.getFileHandle(mo+'.json')}catch(e){continue}
+      const tx=await(await h.getFile()).text();const d=JSON.parse(tx);validate(d);MO[k]={h,t:tx,data:d};ch=true}}
+  return ch}
+function rebuild(){C=MO['@cfg'].data;const m=new Map(),au=[];
+  for(const[k,e]of Object.entries(MO)){au.push(...e.data.audit);if(k!=='@cfg')e.data.gardes.forEach(g=>{g._k=k;m.set(g.id,g)})}
+  D={gardes:[...m.values()],audit:au.sort((a,b)=>a.le<b.le?-1:1)}}
+async function pollOnce(q){let ch=await loadWindow();
+  for(const e of Object.values(MO)){const t=await(await e.h.getFile()).text();if(t!==e.t){const d=JSON.parse(t);validate(d);e.t=t;e.data=d;ch=true}}
+  if(ch){rebuild();if(!$('dlg').open)render();if(!q)setSt('Données mises à jour (autre poste)','o')}sync()}
+const note=()=>{const ms=Object.keys(MO).filter(k=>k!=='@cfg').map(k=>k.split('/')[1]).sort();return`<p class="m">Mois chargés : ${ms.length?ms[0]+' → '+ms[ms.length-1]:'aucun'}${S.all?' (tout)':' · <button class="s" data-a="loadAll">Tout charger</button>'}</p>`};
+const dupChk=(num,id)=>{if(D.gardes.some(g=>g.id!==id&&g.numero.toLowerCase()===num.toLowerCase())&&!confirm('Une garde avec l’ID « '+num+' » existe déjà. Continuer ?'))throw new Error('Enregistrement annulé.')};
+
+/* ===== Comptes administrateur (admin.json, mots de passe hachés PBKDF2) ===== */
+const hx=async(pw,salt)=>{if(!crypto.subtle)throw new Error('Hachage indisponible dans ce contexte.');const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveBits']);
+  const b=await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:Uint8Array.from(atob(salt),c=>c.charCodeAt(0)),iterations:150000},k,256);return btoa(String.fromCharCode(...new Uint8Array(b)))};
+const mkAcc=async(id,pw)=>{const sel=btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));return{id:id.trim(),sel,hash:await hx(pw,sel)}};
+const admRead=async()=>{try{return JSON.parse(await(await(await dir.getFileHandle('admin.json')).getFile()).text())}catch(e){if(e.name==='NotFoundError')return null;throw new Error('admin.json illisible : '+e.message)}};
+const admWrite=async d=>wr(JSON.stringify(d,null,1),await dir.getFileHandle('admin.json',{create:true}));
+const okAdm=id=>{S.role='Administrateur';S.admin=id;if(!S.user){S.user=id;$('user').value=id}S.view='admin';$('role').value=S.role};
+const pwOk=f=>{if(f.pw.length<8||f.pw!==f.pw2)throw new Error('Mots de passe différents ou trop courts (8 caractères minimum).')};
+const PW=[{k:'pw',l:'Mot de passe (8 caractères minimum)',t:'password',r:1,v:''},{k:'pw2',l:'Confirmer le mot de passe',t:'password',r:1,v:''}];
+async function askAdmin(){
+  const d=await admRead();
+  if(!d)return form('Créer le premier compte administrateur',[{k:'id',l:'Identifiant',r:1,v:''},...PW],async f=>{pwOk(f);await admWrite({schema_version:1,comptes:[await mkAcc(f.id,f.pw)]});okAdm(f.id.trim())});
+  form('Connexion administrateur',[{k:'id',l:'Identifiant',r:1,v:''},{k:'pw',l:'Mot de passe',t:'password',r:1,v:''}],async f=>{
+    const a=await admRead(),c=a?.comptes.find(x=>x.id===f.id.trim());await sleep(500);
+    if(!c||await hx(f.pw,c.sel)!==c.hash)throw new Error('Identifiant ou mot de passe incorrect.');okAdm(c.id)})}
+
+/* ===== Connexion ===== */
+async function openDir(d){
+  dir=d;let ch;
+  try{ch=await dir.getFileHandle(FILE)}catch(e){
+    if(e.name!=='NotFoundError')throw e;
+    if(!confirm('Aucune configuration dans ce dossier. Créer un espace de données vide (config.json et un dossier par type de garde) ?'))return;
+    ch=await dir.getFileHandle(FILE,{create:true});const c=seed(),mo=ymd(new Date()).slice(0,7);await wr(JSON.stringify(c,null,1),ch);
+    for(const t of c.types)await wr(JSON.stringify({schema_version:1,type:t.nom,mois:mo,rev:0,gardes:[],audit:[]},null,1),await(await dir.getDirectoryHandle(t.dossier,{create:true})).getFileHandle(mo+'.json',{create:true}));
+  }
+  const tx=await(await ch.getFile()).text();
+  try{const c=JSON.parse(tx);validate(c);if(!c.types||!c.services)throw new Error('configuration incomplète');
+    for(const k in MO)delete MO[k];MO['@cfg']={h:ch,t:tx,data:c};rebuild();await loadWindow();rebuild()}
+  catch(e){D=null;throw new Error('Configuration illisible ou invalide ('+e.message+'). Aucune écriture effectuée.')}
+  setSt('Connecté','o');sync();render();
+}
+const seed=()=>({schema_version:1,rev:0,
+  types:[{nom:'Garde détenu',couleur:'#1f6fd6',dossier:'garde-detenu'},{nom:'Garde patient',couleur:'#2e9e4f',dossier:'garde-patient'}],
+  services:[{nom:'Matin',couleur:'#d99a00',debut:'07:45',fin:'16:00'},{nom:'Après-midi',couleur:'#d9622b',debut:'15:45',fin:'24:00'},{nom:'Nuit',couleur:'#4a4fa3',debut:'23:45',fin:'08:00'}],audit:[]});
+
+/* ===== Formulaires ===== */
+function form(title,fs,ok){
+  const d=$('dlg');
+  d.innerHTML=`<form><h3>${title}</h3>${fs.map(f=>{if(f.t==='checkbox')return`<label><input type="checkbox" name="${f.k}" value="1"${f.v?' checked':''}> ${f.l}</label>`;const n=`name="${f.k}"${f.r?' required':''}`;
+    const c=f.o?`<select ${n}>${f.o.map(o=>{const[v,l]=Array.isArray(o)?o:[o,o];return`<option value="${esc(v)}"${v===f.v?' selected':''}>${esc(l)}</option>`}).join('')}</select>`
+      :f.t==='area'?`<textarea ${n} rows="3">${esc(f.v)}</textarea>`:`<input ${n} type="${f.t||'text'}" value="${esc(f.v)}">`;
+    return`<label>${f.l}${f.r?' *':''}${c}</label>`}).join('')}<p id="ferr" role="alert" class="er"></p><p><button>Enregistrer</button> <button type="button" class="s" data-a="close">Annuler</button></p></form>`;
+  const fm=d.querySelector('form');
+  fm.onsubmit=async e=>{e.preventDefault();$('ferr').textContent='';try{const v=Object.fromEntries(new FormData(fm));fs.forEach(x=>{if(x.t==='checkbox')v[x.k]=v[x.k]?'1':''});await ok(v);d.close()}catch(x){$('ferr').textContent=x.message}};
+  d.showModal();
+}
+const DT=(k,l,v,r)=>({k,l,t:'datetime-local',v:toL(v),r});
+function apply(o,f,ks,d){const ch=[];for(const k of ks){if(!(k in f))continue;
+    if(k==='agent'){const old=o.agent||'',n=f[k].trim();if(old!==n){ch.push('agent : '+(old||'∅')+' → '+n);o.agent=n}continue}
+    if(k==='piquet'){const n=f[k]==='1',old=isPq(o);if(old!==n){ch.push('piquet : '+(old?'oui':'non')+' → '+(n?'oui':'non'));o.piquet=n;delete o.mode}continue}
+    const dt=/debut|fin/.test(k),old=dt?toL(o[k]):(o[k]||'');if(old!==f[k]){ch.push(k+' : '+(old||'∅')+' → '+(f[k]||'∅'));o[k]=dt?toI(f[k]):f[k]}}return ch.join(' ; ')}
+const chkT=(a,b)=>{if(!(T(b)>T(a)))throw new Error('La fin doit être postérieure au début.')};
+const KG=['numero','type','localisation','personne','provenance','tel_service','radio_service','risques','debut_prevu','fin_prevue','debut_reel','fin_reel'],KS=['type','debut','fin','debut_reel','fin_reel','commentaire'],KA=['agent','piquet','debut','fin','debut_reel','fin_reel'];
+const gf=g=>{const ha=(g.services||[]).some(s=>s.aff.length);return[{k:'numero',l:'ID de la garde (ex. A12)',r:1,v:g.numero},{k:'personne',l:'Personne gardée (référence)',r:1,v:g.personne},{k:'type',l:'Type de garde',o:TN(),v:g.type},{k:'localisation',l:'Localisation',v:g.localisation},
+  {k:'provenance',l:'Provenance (prison, pour un détenu)',v:g.provenance},{k:'tel_service',l:'Téléphone de service',v:g.tel_service},{k:'radio_service',l:'Radio de service',v:g.radio_service},{k:'risques',l:'Risques',t:'area',v:g.risques},
+  DT('debut_prevu','Début de la garde',g.debut_prevu,1),...(ha?[]:[DT('fin_prevue','Fin prévue (facultatif)',g.fin_prevue)]),...(g.id&&!ha&&g.statut!=='en_cours'?[DT('fin_reel','Fin réelle',g.fin_reel)]:[])]};
+const sf=s=>[{k:'type',l:'Type de service',o:D.params.services,v:s.type},DT('debut','Début prévu',s.debut,1),DT('fin','Fin prévue',s.fin,1),DT('debut_reel','Début réel',s.debut_reel),DT('fin_reel','Fin réelle',s.fin_reel),{k:'commentaire',l:'Commentaire',v:s.commentaire}];
+const af=(a,s)=>[{k:'agent',l:a.id?'Nom de l’agent':'Nom(s) des agents (séparés par une virgule)',r:1,v:a.id?AN(a.agent):''},{k:'piquet',l:'Droit à la rémunération de piquet (agent arrivé sur la surveillance en moins de 3 h)',t:'checkbox',v:isPq(a)},
+  DT('debut','Début prévu',a.debut||s.debut,1),DT('fin','Fin prévue',a.fin||s.fin,1),DT('debut_reel','Début réel',a.debut_reel),DT('fin_reel','Fin réelle',a.fin_reel)];
+function warns(d,a){const w=[],x=T(a.debut),y=T(a.fin);
+  d.gardes.forEach(h=>h.services.forEach(t=>t.aff.forEach(b=>{if(b.id!==a.id&&(b.agent||'').toLowerCase()===a.nom.toLowerCase()&&T(b.debut)<y&&T(b.fin)>x)w.push('chevauchement avec '+h.numero+' ('+t.type+')')})));
+  return w}
+function chkA(f,s,id,nom){chkT(f.debut,f.fin);const w=warns(D,{id,nom,debut:toI(f.debut),fin:toI(f.fin)});
+  if(w.length&&!confirm('Attention ('+nom+') : '+w.join(' ; ')+'.\nEnregistrer quand même ?'))throw new Error('Enregistrement annulé.')}
+
+/* ===== Export PDF (généré sans bibliothèque, A4 paysage) ===== */
+const WIN={'–':0x96,'—':0x97,'’':0x92,'‘':0x91,'“':0x93,'”':0x94,'…':0x85,'œ':0x9c,'Œ':0x8c,'€':0x80,'•':0x95};
+const pe=t=>{let o='';for(const ch of String(t??'')){const c=ch.charCodeAt(0);o+=c<32?' ':c<256?ch:WIN[ch]?String.fromCharCode(WIN[ch]):'?'}return o.replace(/[\\()]/g,m=>'\\'+m)};
+let cvx=null;try{cvx=document.createElement('canvas').getContext('2d')}catch(e){}
+const tw=(t,z,b)=>cvx?(cvx.font=(b?'bold ':'')+z+'px Arial',cvx.measureText(t).width):String(t).length*z*.52;
+function pdfBytes(g,du,au,reels){
+  const a0=+new Date(du+'T00:00'),a1=+new Date(au+'T00:00')+864e5;
+  const rows=g.services.flatMap(s=>s.aff.map(a=>({s:s.type,a}))).filter(z=>T(z.a.fin)>a0&&T(z.a.debut)<a1)
+    .sort((p,q)=>T(p.a.debut)-T(q.a.debut)||rank(p.s)-rank(q.s)||(p.a.agent||'').localeCompare(q.a.agent||''));
+  if(!rows.length)throw new Error('Aucun service planifié sur cette période.');
+  const rg=(a,b)=>{const nd=ymd(new Date(T(b)))>ymd(new Date(T(a)));return tm(a)+'–'+(nd&&tm(b)==='00:00'?'24:00':tm(b)+(nd?' (+1)':''))};
+  const dl=i=>['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'][new Date(T(i)).getDay()]+' '+fmt(i).slice(0,10);
+  const hd=m=>{m=Math.round(m);return Math.floor(m/60)+'h'+P(m%60)};
+  const mins=a=>{const r=a.debut_reel&&a.fin_reel;return(T(r?a.fin_reel:a.fin)-T(r?a.debut_reel:a.debut))/6e4};
+  const W=842,H=595,M=36,RH=16,pages=[],now=new Date().toISOString();
+  const CW=[['Date',100],['Service',95],['Agent',reels?190:300],['Prévu',110],...(reels?[['Réel',110]]:[]),['Durée',65],['Piquet',100]];
+  let ops,y,cur=CW,pf=true;
+  const txt=(x,yy,t,z=9,b=0)=>ops.push(`BT /F${b?2:1} ${z} Tf ${x} ${yy} Td (${pe(t)}) Tj ET`);
+  const fit=(t,w,z,b)=>{t=String(t??'');if(tw(t,z,b)<=w)return t;while(t.length>1&&tw(t+'…',z,b)>w)t=t.slice(0,-1);return t+'…'};
+  const row=(cells,h,sep)=>{if(h)ops.push(`0.88 0.91 0.96 rg ${M} ${y-RH} ${W-2*M} ${RH} re f 0 g`);
+    if(sep)ops.push(`0.9 w ${M} ${y} m ${W-M} ${y} l S`);
+    let x=M;cells.forEach((c,i)=>{txt(x+3,y-RH+5,fit(c,cur[i][1]-6,9,h),9,h);x+=cur[i][1]});
+    ops.push(`0.25 w ${M} ${y-RH} m ${W-M} ${y-RH} l S`);y-=RH};
+  const head=()=>{if(cur.t){txt(M,y-12,cur.t,10,1);y-=20}pf=true;row(cur.map(c=>c[0]),1)};
+  const newPage=()=>{ops=['0.6 G'];pages.push(ops);y=H-M;
+    if(pages.length===1){txt(M,y-14,'Liste des services — '+ref(g),15,1);txt(M,y-32,`ID ${g.numero} · ${g.type} · ${g.localisation||'—'} · Statut : ${LBL[g.statut]}`,10);
+      txt(M,y-47,`Période : du ${fmt(du+'T00:00').slice(0,10)} au ${fmt(au+'T00:00').slice(0,10)} · édité le ${fmt(now)} par ${S.user||'—'}`,10);y-=66}
+    else{txt(M,y-12,ref(g)+' · ID '+g.numero+' — suite',10,1);y-=26}
+    head()};
+  newPage();let last='';
+  rows.forEach(z=>{if(y-RH<M+20)newPage();const d=ymd(new Date(T(z.a.debut))),sh=d!==last||pf,sep=d!==last&&last!=='';last=d;pf=false;
+    row([sh?dl(z.a.debut):'',z.s,z.a.agent,rg(z.a.debut,z.a.fin),...(reels?[z.a.debut_reel&&z.a.fin_reel?rg(z.a.debut_reel,z.a.fin_reel):'—']:[]),hd(mins(z.a)),isPq(z.a)?'Oui':''],0,sep)});
+  const all=g.services.filter(v=>v.type!=='Pause').flatMap(v=>v.aff),tot=all.reduce((n,a)=>n+mins(a),0),per=rows.filter(z=>z.s!=='Pause').reduce((n,z)=>n+mins(z.a),0);
+  if(y-52<M+20)newPage();y-=12;
+  txt(M,y-12,`Total des heures prestées sur l’ensemble de la garde : ${hd(tot)}`,12,1);
+  txt(M,y-30,`${all.length} affectations · ${new Set(all.map(a=>(a.agent||'').toLowerCase())).size} agents · dont période exportée : ${hd(per)} · piquets avec droit à la rémunération : ${all.filter(isPq).length}`,9);
+  pages.forEach((o,i)=>{const f=(t,x)=>o.push(`BT /F1 8 Tf ${x} 20 Td (${pe(t)}) Tj ET`);f('Suivi des gardes — document confidentiel',M);f(`Page ${i+1}/${pages.length}`,W-M-48)});
+  const objs=[],add=x=>objs.push(x),kids=[];
+  add('<< /Type /Catalog /Pages 2 0 R >>');add('');add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+  pages.forEach(o=>{const st=o.join('\n'),pi=objs.length+1;kids.push(pi+' 0 R');
+    add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${pi+1} 0 R >>`);add(`<< /Length ${st.length} >>\nstream\n${st}\nendstream`)});
+  objs[1]=`<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pages.length} >>`;
+  let out='%PDF-1.4\n';const off=[];objs.forEach((o,i)=>{off.push(out.length);out+=`${i+1} 0 obj\n${o}\nendobj\n`});
+  const xr=out.length;out+=`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`+off.map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')+`trailer\n<< /Size ${objs.length+1} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF\n`;
+  return Uint8Array.from(out,c=>c.charCodeAt(0));
+}
+function pdfExport(g,du,au,reels){const u=URL.createObjectURL(new Blob([pdfBytes(g,du,au,reels)],{type:'application/pdf'})),a=document.createElement('a');
+  a.href=u;a.download='services_'+slug(g.numero)+'_'+du+'_'+au+'.pdf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),8000)}
+
+/* ===== Actions ===== */
+const cur=()=>G(D,S.sel);
+const H={
+  go:t=>{S.view=t.v;render()},close:()=>$('dlg').close(),
+  selG:t=>{S.sel=t.id;if(!S.pan){S.pan=true;ls('gpan','1')}render()},
+  tgP:t=>{const g=cur();return upd(g.id,g.v,x=>{const a=x.services.find(z=>z.id===t.s).aff.find(z=>z.id===t.i),n=!isPq(a);a.piquet=n;delete a.mode;return{action:'Piquet',objet:x.numero,details:a.agent+' : '+(n?'droit au piquet':'sans piquet')}}).catch(e=>{render();throw e})},
+  pan:()=>{S.pan=!S.pan;ls('gpan',S.pan?'1':'0');render()},
+  togG:t=>{S.sel=t.id;S.open.has(t.id)?S.open.delete(t.id):S.open.add(t.id);render()},
+  sort:t=>{S.sort={k:t.k,d:S.sort.k===t.k?-S.sort.d:1};render()},
+  pick:async()=>{const d=await window.showDirectoryPicker({id:'gardes',mode:'readwrite'});try{await idbSet('dir',d)}catch(e){}await openDir(d)},
+  resume:async()=>{const h=await idbGet('dir');if(!h)throw new Error('Aucun dossier mémorisé.');
+    if(await h.queryPermission({mode:'readwrite'})!=='granted'&&await h.requestPermission({mode:'readwrite'})!=='granted')throw new Error('Permission refusée.');await openDir(h)},
+  today:()=>{S.day=ymd(new Date());render()},
+  newG:()=>{const n=new Date();n.setSeconds(0,0);const id=uid();
+    form('Nouvelle garde',gf({debut_prevu:n.toISOString(),type:TN()[0]}),async f=>{f.numero=f.numero.trim();dupChk(f.numero,'');
+      await commit(async ctx=>{const d=await ctx.file(kOf(f.type,toI(f.debut_prevu)));
+        const g={id,statut:'en_cours',cree_le:new Date().toISOString(),v:1,services:[],fin_prevue:'',fin_reel:''};
+        apply(g,f,KG);g.debut_reel=g.debut_prevu;d.gardes.push(g);return{action:'Création garde',objet:g.numero}});
+      S.sel=id;render()})},
+  editG:()=>{const g=cur(),v0=g.v;form('Modifier la garde '+esc(g.numero),gf(g),async f=>{f.numero=f.numero.trim();dupChk(f.numero,g.id);if(f.fin_prevue)chkT(f.debut_prevu,f.fin_prevue);
+    await commit(async ctx=>{const k0=g._k,d0=await ctx.file(k0),x=G(d0,g.id);if(!x)throw new Error('Garde introuvable.');if(x.v!==v0)throw conflit();
+      const dt=apply(x,f,KG);x.debut_reel=x.debut_prevu;recalc(x);x.v++;const k1=kOf(x.type,x.debut_prevu);
+      if(k1!==k0){d0.gardes.splice(d0.gardes.indexOf(x),1);(await ctx.file(k1)).gardes.push(x)}
+      return{action:'Modification garde',objet:x.numero,details:dt+(k1!==k0?' ; déplacée vers '+k1:'')}})})},
+  delG:async()=>{const g=cur();if(!confirm('Supprimer définitivement la garde '+ref(g)+' ('+g.numero+') ?\nLes copies datées antérieures du dossier « sauvegardes » permettent de la retrouver.'))return;
+    await commit(async ctx=>{const d=await ctx.file(g._k),k=d.gardes.findIndex(x=>x.id===g.id);if(k<0)throw new Error('Garde introuvable (déjà supprimée ?).');if(d.gardes[k].v!==g.v)throw conflit();
+      const x=d.gardes.splice(k,1)[0];return{action:'Suppression garde',objet:x.numero,details:x.type+' — début '+fmt(x.debut_prevu)}});S.sel=null;S.open.delete(g.id);render()},
+  addA:()=>{const g=cur(),v0=g.v;
+    form('Affecter des agents',[{k:'service',l:'Service',o:C.services.map(z=>z.nom),v:C.services[0]?.nom},{k:'agent',l:'Nom(s) des agents (séparés par une virgule)',r:1,v:''},{k:'piquet',l:'Droit à la rémunération de piquet (agent arrivé sur la surveillance en moins de 3 h)',t:'checkbox',v:false},
+      {k:'du',l:'Du (jour)',t:'date',r:1,v:toL(g.debut_prevu).slice(0,10)},{k:'au',l:'Au (jour, facultatif : plusieurs jours de suite)',t:'date',v:''},
+      {k:'h1',l:'Heure de début (vide = horaire du service)',t:'time',v:''},{k:'h2',l:'Heure de fin (vide = horaire du service)',t:'time',v:''}],
+    async f=>{const ns=f.agent.split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean);if(!ns.length)throw new Error('Saisissez au moins un nom.');
+      const[a,b]=hrs(f.service,f.h1,f.h2),days=[];for(let d=new Date(f.du+'T00:00'),e=new Date((f.au||f.du)+'T00:00');d<=e&&days.length<62;d.setDate(d.getDate()+1))days.push(ymd(d));
+      if(!days.length)throw new Error('Période invalide.');
+      const list=[];ns.forEach(n=>days.forEach(dy=>{const[s,e]=mk(dy,a,b);list.push({n,s,e})}));
+      const w=[...new Set(list.flatMap(z=>warns(D,{id:'',nom:z.n,debut:z.s,fin:z.e}).map(x=>z.n+' : '+x)))];
+      if(w.length&&!confirm('Attention :\n'+w.slice(0,6).join('\n')+(w.length>6?'\n… (+'+(w.length-6)+')':'')+'\nEnregistrer quand même ?'))throw new Error('Enregistrement annulé.');
+      await upd(g.id,v0,(x,d)=>{if(x.statut!=='en_cours')throw new Error('Garde clôturée : plus d’ajout d’agent.');
+        let sv=x.services.find(z=>z.type===f.service);if(!sv)x.services.push(sv={id:uid(),type:f.service,aff:[]});
+        list.forEach(z=>sv.aff.push({id:uid(),agent:z.n,piquet:f.piquet==='1',debut:z.s,fin:z.e,debut_reel:'',fin_reel:''}));
+        return{action:'Affectation agents',objet:x.numero,details:f.service+' · '+ns.join(', ')+' · '+days[0]+(days.length>1?' → '+days[days.length-1]:'')}})})},
+  editA:t=>{const g=cur(),v0=g.v,s=g.services.find(z=>z.id===t.s),a=s.aff.find(z=>z.id===t.i);
+    form('Modifier l’affectation',af(a,s),async f=>{chkA(f,s,a.id,f.agent.trim());
+      await upd(g.id,v0,(x,d)=>({action:'Modification affectation',objet:x.numero,details:AN(a.agent)+' — '+apply(x.services.find(z=>z.id===t.s).aff.find(z=>z.id===t.i),f,KA,d)}))})},
+  exportG:()=>{const g=cur(),A=g.services.flatMap(s=>s.aff),fin=A.length?ymd(new Date(Math.max(...A.map(a=>T(a.fin)))-6e4)):ymd(new Date());
+    form('Exporter les services en PDF',[{k:'du',l:'Du (jour)',t:'date',r:1,v:toL(g.debut_prevu).slice(0,10)},{k:'au',l:'Au (jour)',t:'date',r:1,v:fin},
+      {k:'reels',l:'Horaires',o:[['1','Prévus et réels'],['0','Prévus seulement']],v:'1'}],async f=>{
+      if(f.au<f.du)throw new Error('Le jour de fin doit être postérieur ou égal au jour de début.');
+      pdfExport(g,f.du,f.au,f.reels==='1');
+      try{await commit(async ctx=>{await ctx.file(g._k);return{action:'Export PDF',objet:g.numero,details:'du '+f.du+' au '+f.au}})}
+      catch(e){showErr(new Error('PDF créé, mais l’export n’a pas pu être journalisé : '+e.message))}})},
+  mvT:t=>commit(async ctx=>{const cf=await ctx.cfg(),i=cf.types.findIndex(x=>x.nom===t.n),j=i+ +t.d;if(i<0||j<0||j>=cf.types.length)throw new Error('Déplacement impossible.');
+    [cf.types[i],cf.types[j]]=[cf.types[j],cf.types[i]];return{cfg:1,action:'Ordre des types de garde',objet:t.n,details:'position '+(j+1)}}),
+  addT:()=>form('Nouveau type de garde',[{k:'nom',l:'Nom du type',r:1,v:''},{k:'couleur',l:'Couleur',t:'color',v:'#d9622b'}],f=>commit(async ctx=>{
+    const cf=await ctx.cfg(),n=f.nom.trim();if(cf.types.some(t=>t.nom.toLowerCase()===n.toLowerCase()))throw new Error('Ce type existe déjà.');
+    const t={nom:n,couleur:f.couleur,dossier:slug(n)};if(cf.types.some(x=>x.dossier===t.dossier))t.dossier+='-'+cf.types.length;cf.types.push(t);
+    await ctx.file(t.dossier+'/'+ymd(new Date()).slice(0,7));return{cfg:1,action:'Nouveau type de garde',objet:n,details:t.dossier+'/'}})),
+  addSv:()=>form('Nouveau type de service',[{k:'nom',l:'Nom du service',r:1,v:''},{k:'couleur',l:'Couleur',t:'color',v:'#7a4fa3'},{k:'debut',l:'Heure de début (facultatif)',t:'time',v:''},{k:'fin',l:'Heure de fin (facultatif)',t:'time',v:''}],f=>commit(async ctx=>{
+    const cf=await ctx.cfg(),n=f.nom.trim();if(cf.services.some(t=>t.nom.toLowerCase()===n.toLowerCase()))throw new Error('Ce service existe déjà.');
+    cf.services.push({nom:n,couleur:f.couleur,debut:f.debut,fin:f.fin});return{cfg:1,action:'Nouveau type de service',objet:n}})),
+  chpw:()=>form('Changer mon mot de passe',[{k:'o',l:'Mot de passe actuel',t:'password',r:1,v:''},...PW],async f=>{
+    const d=await admRead(),c=d?.comptes.find(x=>x.id===S.admin);if(!c||await hx(f.o,c.sel)!==c.hash)throw new Error('Mot de passe actuel incorrect.');pwOk(f);Object.assign(c,await mkAcc(c.id,f.pw));await admWrite(d)}),
+  addAdm:()=>form('Nouveau compte administrateur',[{k:'id',l:'Identifiant',r:1,v:''},...PW],async f=>{
+    const d=await admRead();if(d.comptes.some(x=>x.id===f.id.trim()))throw new Error('Identifiant déjà utilisé.');pwOk(f);d.comptes.push(await mkAcc(f.id,f.pw));await admWrite(d)}),
+  loadAll:async()=>{S.all=true;if(await loadWindow())rebuild();render()},
+  delA:async t=>{const g=cur();if(!confirm('Retirer cet agent du service ?'))return;
+    await upd(g.id,g.v,x=>{if(x.statut!=='en_cours')throw new Error('Garde clôturée.');const s=x.services.find(z=>z.id===t.s),k=s.aff.findIndex(z=>z.id===t.i);const a=s.aff.splice(k,1)[0];return{action:'Retrait agent',objet:x.numero,details:AN(a.agent)+' / '+s.type}})},
+  clot:async()=>{const g=cur();if(!confirm('Clôturer cette garde ? Elle passera en « Terminée — à traiter » n’acceptera plus d’agent et les affectations futures seront retirées.'))return;
+    await upd(g.id,g.v,x=>{if(x.statut!=='en_cours')throw new Error('Garde déjà clôturée.');x.statut='a_traiter';const n=new Date().toISOString();x.cloture_le=n;x.fin_reel=n;let rm=0;x.services.forEach(s=>{s.aff=s.aff.filter(a=>T(a.debut)>T(n)?(rm++,false):true);s.aff.forEach(a=>{if(!a.fin_reel&&T(a.fin)>T(n))a.fin_reel=n})});return{action:'Clôture opérationnelle',objet:x.numero,details:rm?rm+' affectation(s) future(s) retirée(s)':''}})},
+  trait:async()=>{const g=cur();if(!confirm('Valider le traitement administratif de cette garde ?'))return;
+    await upd(g.id,g.v,x=>{const p=[];if(!x.personne||!x.type||!x.debut_reel)p.push('champs obligatoires manquants (personne, type, début)');
+      else if(x.fin_reel&&!(T(x.fin_reel)>T(x.debut_reel)))p.push('fin réelle antérieure au début');
+      x.services.forEach(s=>s.aff.forEach(a=>{if(!(T(a.fin)>T(a.debut)))p.push('affectation de '+AN(a.agent)+' incohérente')}));
+      if(p.length)throw new Error('Traitement impossible : '+p.join(' ; ')+'.');
+      x.statut='traitee';x.traite_le=new Date().toISOString();x.traite_par=S.user||'(non renseigné)';return{action:'Traitement administratif',objet:x.numero}})},
+  reopen:()=>{const g=cur();form('Rouvrir '+esc(g.numero),[{k:'j',l:'Justification',t:'area',r:1,v:''}],async f=>
+    upd(g.id,g.v,x=>{x.statut='a_traiter';x.traite_le='';return{action:'Réouverture',objet:x.numero,details:f.j}}))},
+  addP:t=>form('Ajouter un élément',[{k:'v',l:'Libellé',r:1,v:''}],f=>commit(d=>{const l=d.params[t.l],v=f.v.trim();if(l.includes(v))throw new Error('Déjà présent.');l.push(v);return{action:'Paramètre',objet:t.l,details:v}})),
+  addAg:()=>form('Nouvel agent',[{k:'v',l:'Nom ou identifiant professionnel',r:1,v:''}],f=>commit(d=>{d.agents.push({id:uid(),nom:f.v.trim(),actif:true});return{action:'Ajout agent',objet:'agents',details:f.v}})),
+  togAg:t=>commit(d=>{const a=d.agents.find(x=>x.id===t.id);a.actif=!a.actif;return{action:a.actif?'Réactivation agent':'Désactivation agent',objet:'agents',details:a.nom}}),
+};
+document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(t&&H[t.dataset.a])Promise.resolve().then(()=>H[t.dataset.a](t.dataset)).catch(showErr)});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('tr[data-a],th[data-a],.gr[data-a]'))e.target.click()});
+document.addEventListener('change',async e=>{const t=e.target,c=t.dataset.col;
+  try{if(c){await commit(async ctx=>{const cf=await ctx.cfg(),x=cf[c].find(z=>z.nom===t.dataset.n);x.couleur=t.value;return{cfg:1,action:'Couleur',objet:t.dataset.n,details:t.value}});return}
+    const f=t.dataset.f;if(!f)return;const[a,b]=f.split('.');if(b)S[a][b]=t.value;else S[a]=t.value;if(await loadWindow())rebuild();render()}catch(x){showErr(x)}});
+$('user').value=S.user;$('role').value=S.role;$('dlg').addEventListener('close',()=>{$('role').value=S.role;if(D)render()});
+$('user').onchange=e=>{S.user=e.target.value.trim();ls('gu',S.user)};
+$('role').onchange=async e=>{const v=e.target.value;
+  if(v==='Administrateur'){if(!D){e.target.value=S.role;showErr(new Error('Connectez-vous d’abord au dossier de données.'));return}try{await askAdmin()}catch(x){showErr(x)}return}
+  S.role=v;S.admin=null;ls('gr',v);if(S.view==='admin')S.view='dash';render()};
+
+/* ===== Vues ===== */
+const COLS=[['ref','Référence'],['numero','ID'],['type','Type'],['localisation','Localisation'],['debut','Début'],['fin','Fin'],['statut','Statut']];
+const tIdx=g=>{const i=C.types.findIndex(t=>t.nom===g.type);return i<0?99:i};
+const gv=(g,k)=>k==='type'?tIdx(g):k==='ref'?ref(g).toLowerCase():k==='debut'?T(g.debut_reel||g.debut_prevu):k==='fin'?T(g.fin_reel||g.fin_prevue)||0:g[k];
+const opts=(l,v,all)=>(all?`<option value="">${all}</option>`:'')+l.map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('');
+function tbl(l){const{k,d}=S.sort;l=[...l].sort((a,b)=>(gv(a,k)>gv(b,k)?1:-1)*d);
+  return l.length?`<table><tr>${COLS.map(c=>`<th tabindex="0" data-a="sort" data-k="${c[0]}">${c[1]}${k===c[0]?(d>0?' ▲':' ▼'):''}</th>`).join('')}</tr>${l.map(g=>`<tr tabindex="0" data-a="selG" data-id="${g.id}"><td><b>${esc(ref(g))}</b></td><td class="m">${esc(g.numero)}</td><td>${dot(g.type)}${esc(g.type)}</td><td>${esc(g.localisation)}</td><td>${fmt(g.debut_reel||g.debut_prevu)}</td><td>${fmt(g.fin_reel||g.fin_prevue)}</td><td><span class="chip ${g.statut}">${LBL[g.statut]}</span></td></tr>`).join('')}</table>`:'<p class="m">Aucune garde.</p>'}
+
+function stats(){
+  const f=S.f,a=f.du?+new Date(f.du+'T00:00'):-1/0,b=f.au?+new Date(f.au+'T00:00')+864e5:1/0;
+  const gs=D.gardes.filter(g=>{const s=T(g.debut_reel||g.debut_prevu);return s>=a&&s<b&&(!f.type||g.type===f.type)&&(!f.loc||(g.localisation||'').toLowerCase().includes(f.loc.toLowerCase()))});
+  const h=(x,y)=>Math.max(0,(y-x)/36e5),r={n:gs.length,types:{},st:{en_cours:0,a_traiter:0,traitee:0},dur:0,ha:0,hp:0,ag:new Set(),sv:0,pq:0,pqt:{},per:{}};
+  gs.forEach(g=>{r.types[g.type]=(r.types[g.type]||0)+1;r.st[g.statut]++;
+    const s=T(g.debut_reel||g.debut_prevu),e=T(g.fin_reel||g.fin_prevue)||Date.now();r.dur+=h(s,e);
+    const k=ymd(new Date(s)).slice(0,S.grp==='jour'?10:S.grp==='mois'?7:4);r.per[k]=(r.per[k]||0)+1;
+    g.services.forEach(v=>{r.sv+=new Set(v.aff.map(x=>ymd(new Date(T(x.debut))))).size;if(v.type==='Pause')return;v.aff.forEach(x=>{const u=x.debut_reel&&x.fin_reel,q=h(T(u?x.debut_reel:x.debut),T(u?x.fin_reel:x.fin));r.ha+=q;r.ag.add((x.agent||'').toLowerCase());if(isPq(x)){r.pq++;r.hp+=q;const o=r.pqt[g.type]||(r.pqt[g.type]={n:0,h:0});o.n++;o.h+=q}})})});
+  return r;
+}
+function svg(ser,n,lab,tk){
+  const W=640,H=230,L=30,R=10,U=10,B=24,mx=Math.max(1,...ser.flatMap(s=>s.v)),X=i=>L+(W-L-R)*i/(n-1||1),Y=v=>U+(H-U-B)*(1-v/mx),st=Math.ceil(mx/6);let g='';
+  for(let v=0;v<=mx;v+=st)g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="#e1e5ea"/><text x="${L-5}" y="${Y(v)+3}" text-anchor="end">${v}</text>`;
+  for(let i=0;i<n;i++)if(tk(i))g+=`<text x="${X(i)}" y="${H-8}" text-anchor="middle">${lab(i)}</text>`;
+  return`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Courbes de gardes simultanées par type">${g}${ser.map(s=>`<path fill="none" stroke="${s.c}" stroke-width="2.2" d="M${X(0)} ${Y(s.v[0])}${s.v.slice(1).map((y,i)=>` H${X(i+1)} V${Y(y)}`).join('')}"/>`).join('')}</svg>
+  <div>${ser.map(s=>`<span class="chip">${dot(s.name)}${esc(s.name)} (max ${Math.max(...s.v)})</span>`).join(' ')}</div>`}
+function charts(){
+  const q=(S.f.loc||'').toLowerCase(),I=D.gardes.filter(g=>!q||(g.localisation||'').toLowerCase().includes(q)).map(g=>({ty:g.type,s:T(g.debut_reel||g.debut_prevu),e:T(g.fin_reel||g.fin_prevue)||Date.now()})).filter(x=>x.e>x.s);
+  const TY=[...new Set([...TN(),...D.gardes.map(g=>g.type)])],cnt=(ty,t)=>I.filter(x=>x.ty===ty&&x.s<=t&&t<x.e).length;
+  const cd=S.cday||ymd(new Date()),cm=S.cmon||ymd(new Date()).slice(0,7),d0=+new Date(cd+'T00:00'),[y,m]=cm.split('-').map(Number),nd=new Date(y,m,0).getDate();
+  const dayS=TY.map(ty=>({name:ty,c:tc(ty),v:Array.from({length:97},(_,i)=>cnt(ty,d0+i*9e5))}));
+  const moS=TY.map(ty=>({name:ty,c:tc(ty),v:Array.from({length:nd},(_,d)=>{const b=+new Date(y,m-1,d+1);let mx=0;for(let i=0;i<48;i++)mx=Math.max(mx,cnt(ty,b+i*18e5));return mx})}));
+  return`<div class="c"><h3>Gardes simultanées par type — journée <input type="date" data-f="cday" value="${cd}"></h3>${svg(dayS,97,i=>P(i/4)+'h',i=>i%8===0)}</div>
+  <div class="c"><h3>Pic de gardes simultanées par type — mois <input type="month" data-f="cmon" value="${cm}"></h3>${svg(moS,nd,i=>i+1,i=>i===0||(i+1)%5===0)}</div>`}
+function vDash(){
+  const r=stats(),f=S.f,k=(n,l)=>`<div><b>${n}</b>${l}</div>`,o=x=>Math.round(x*10)/10;
+  return`<div class="c"><h2>Tableau de bord</h2>${note()}<div class="fl"><label>Du <input type="date" data-f="f.du" value="${f.du||''}"></label><label>Au <input type="date" data-f="f.au" value="${f.au||''}"></label>
+  <label>Type <select data-f="f.type">${opts(TN(),f.type,'Tous')}</select></label><label>Localisation <input data-f="f.loc" value="${esc(f.loc||'')}"></label></div>
+  <div class="kpi">${k(r.n,'gardes (par date de début)')}${k(r.st.en_cours,'en cours')}${k(r.st.a_traiter,'à traiter')}${k(r.st.traitee,'traitées')}${k(o(r.dur)+' h','durée cumulée')}${k(o(r.ha)+' h','heures-agents')}${k(r.pq,'piquets avec droit à la rémunération')}${k(r.ag.size,'agents distincts')}${k(r.sv,'services')}</div>
+  <p class="m">Règles : durée = fin réelle (sinon prévue) − début réel (sinon prévu) ; heures-agents = somme des affectations (horaires réels si renseignés), services « Pause » exclus ; piquet = affectation cochée « droit à la rémunération de piquet » (agent arrivé sur la surveillance en moins de 3 h) ; agents distincts = agents différents, sans doublon.</p></div>
+  ${charts()}<div class="c"><h3>Par type</h3><table>${Object.entries(r.types).map(([t,n])=>`<tr><td>${dot(t)}${esc(t)}</td><td>${n}</td></tr>`).join('')||'<tr><td>—</td></tr>'}</table>
+  <h3>Piquets par type de garde</h3><table><tr><th>Type</th><th>Piquets</th><th>Heures concernées</th></tr>${[...new Set([...TN(),...Object.keys(r.pqt)])].map(t=>`<tr><td>${dot(t)}${esc(t)}</td><td>${r.pqt[t]?.n||0}</td><td>${o(r.pqt[t]?.h||0)} h</td></tr>`).join('')}</table>
+  <h3>Par <select data-f="grp">${['jour','mois','annee'].map(x=>`<option value="${x}"${S.grp===x?' selected':''}>${x==='annee'?'année':x}</option>`).join('')}</select></h3>
+  <table>${Object.entries(r.per).sort().reverse().slice(0,31).map(([t,n])=>`<tr><td>${t}</td><td>${n}</td></tr>`).join('')||'<tr><td>—</td></tr>'}</table></div>`;
+}
+function vCours(){
+  const d0=+new Date(S.day+'T00:00'),d1=d0+864e5,pc=x=>(Math.min(Math.max(x,d0),d1)-d0)/864e3,now=Date.now();
+  const l=D.gardes.filter(g=>g.statut==='en_cours'&&T(g.debut_reel||g.debut_prevu)<d1&&(T(g.fin_reel||g.fin_prevue)||1/0)>d0).sort((a,b)=>S.gs==='ref'?ref(a).localeCompare(ref(b)):S.gs==='debut'?T(a.debut_reel||a.debut_prevu)-T(b.debut_reel||b.debut_prevu):tIdx(a)-tIdx(b)||T(a.debut_reel||a.debut_prevu)-T(b.debut_reel||b.debut_prevu));
+  const bar=(s,e,c,h,ti,st,cl)=>`<div class="gb${cl?' '+cl:''}" style="left:${pc(s)}%;width:${Math.max(pc(e)-pc(s),.6)}%;background:${c};${st||''}" title="${esc(ti)}">${h}</div>`;
+  const toDay=S.day===ymd(new Date());
+  const info=g=>{const A=g.services.flatMap(v=>v.aff),nm=S.role==='Consultation',sb=g.debut_reel||g.debut_prevu;
+    const cu=[...new Set(A.filter(a=>T(a.debut)<=now&&T(a.fin)>now).map(a=>a.agent))].join(', ')||'—',nx=A.filter(a=>T(a.debut)>now).sort((p,q)=>T(p.debut)-T(q.debut))[0];
+    const nt=nx?[...new Set(A.filter(a=>a.debut===nx.debut).map(a=>a.agent))].join(', ')+' ('+(ymd(new Date(T(nx.debut)))===ymd(new Date())?'':fmt(nx.debut).slice(0,5)+' ')+tm(nx.debut)+')':'—';
+    return[[0,g.localisation],['Tél.',g.tel_service],['Radio',g.radio_service],['Début',fmt(sb).slice(0,5)+' '+tm(sb)],['Risques',!nm&&g.risques&&g.risques.replace(/\s+/g,' ')],['Actuel',cu],['Suivant',nt]].filter(x=>x[1])};
+  const svRows=g=>{const by={};g.services.forEach(v=>v.aff.filter(a=>T(a.fin)>d0&&T(a.debut)<d1).forEach(a=>(by[v.type]||(by[v.type]=[])).push(a)));
+    const ts=[...new Set([...C.services.filter(z=>z.debut&&z.fin).map(z=>z.nom),...Object.keys(by)])].sort((a,b)=>rank(a)-rank(b));
+    return ts.map(t=>{const m={};(by[t]||[]).forEach(a=>{const k=a.debut+'|'+a.fin;(m[k]||(m[k]={a,n:[]})).n.push(a.agent+(isPq(a)?' (piquet)':''))});
+      const it=Object.values(m).sort((p,q)=>T(p.a.debut)-T(q.a.debut)),ln=[];it.forEach(x=>{let k=ln.findIndex(e=>e<=T(x.a.debut));if(k<0)k=ln.length;ln[k]=T(x.a.fin);x.k=k});
+      return`<div class="gr sub" style="height:${Math.max(1,ln.length)*26+4}px"><div class="gl">&nbsp;&nbsp;↳ <i class="dot" style="background:${sc(t)}"></i>${esc(t)}</div><div class="gt">${it.map(x=>{const a=x.a,nm=x.n.join(', '),hh=tm(a.debut)+'–'+tm(a.fin);
+        return bar(T(a.debut),T(a.fin),sc(t),(T(a.debut)<d0?'◂ ':'')+esc(nm)+' · '+hh+(T(a.fin)>d1?' ▸':''),t+' · '+nm+' · '+hh,'top:'+(3+x.k*26)+'px')}).join('')||'<span class="m" style="display:block;padding:6px 8px">aucun agent</span>'}</div></div>`}).join('')};
+  const rows=l.map(g=>{const s=T(g.debut_reel||g.debut_prevu),e=T(g.fin_reel||g.fin_prevue)||Math.max(s,now),o=S.open.has(g.id),c=tc(g.type),it=info(g),w=pc(e)-pc(s);
+    const h=`<span class="t">${it.map(([k,v])=>(k?`<span class="kk">${k}</span>`:'')+esc(v)).join('<span class="ss">|</span>')}</span>`,ti=it.map(([k,v])=>(k?k+' ':'')+v).join(' | ');
+    const chip=w<55?`<div class="gx" title="${esc(ti)}" style="background:${c};${pc(s)+w/2<50?`left:${pc(e)}%;max-width:${100-pc(e)}%`:`right:${100-pc(s)}%;max-width:${pc(s)}%`}">${h}</div>`:'';
+    return`<div class="gr" tabindex="0" data-a="togG" data-id="${g.id}"><div class="gl">${o?'▾':'▸'} <b>${esc(ref(g))}</b><br>${dot(g.type)}${esc(g.type)}</div><div class="gt">${bar(s,e,c,w<55?'':h,ti,'','main')}${chip}</div></div>${o?svRows(g):''}`}).join('');
+  const nl=S.day===ymd(new Date())?`<div class="now" style="left:calc(170px + (100% - 170px) * ${(now-d0)/864e5})" title="Heure actuelle"></div>`:'';
+  return`<div class="c"><h2>Gardes en cours</h2>${note()}<div class="fl"><label>Jour <input type="date" data-f="day" value="${S.day}"></label><button class="s" data-a="today">Aujourd’hui</button><label>Tri <select data-f="gs">${[['type','Type de garde (ordre défini)'],['debut','Début'],['ref','Référence']].map(([v,t])=>`<option value="${v}"${S.gs===v?' selected':''}>${t}</option>`).join('')}</select></label>${rw()?'<button data-a="newG">+ Nouvelle garde</button>':''}</div>
+  <div class="gw"><div class="gr" style="height:20px;border:0;cursor:default"><div class="gl"></div><div class="gt gh" style="background:none">${Array.from({length:24},(_,h)=>`<span>${h%2?'':P(h)}</span>`).join('')}</div></div>${rows||'<p class="m">Aucune garde en cours ce jour-là.</p>'}${nl}</div>
+  <p class="m">Échelle 00:00–24:00. Cliquez sur une garde pour déplier ses services : une ligne par service (Matin, Après-midi, Nuit), avec les noms des agents dans les barres. Les gardes à cheval sur minuit sont découpées par jour (◂ ▸).</p></div>`;
+}
+const vTraiter=()=>`<div class="c"><h2>Gardes terminées à traiter</h2>${note()}${tbl(D.gardes.filter(g=>g.statut==='a_traiter'))}</div>`;
+function vHist(){
+  const h=S.h,fi=(k,l,t='text')=>`<label>${l} <input type="${t}" data-f="h.${k}" value="${esc(h[k]||'')}"></label>`;
+  const l=D.gardes.filter(g=>(!h.num||(g.numero+(S.role!=='Consultation'?' '+(g.personne||''):'')).toLowerCase().includes(h.num.toLowerCase()))&&(!h.type||g.type===h.type)&&(!h.loc||(g.localisation||'').toLowerCase().includes(h.loc.toLowerCase()))&&(!h.st||g.statut===h.st)
+    &&(!h.du||T(g.debut_reel||g.debut_prevu)>=+new Date(h.du+'T00:00'))&&(!h.au||T(g.debut_reel||g.debut_prevu)<+new Date(h.au+'T00:00')+864e5)
+    &&(!h.ag||g.services.some(s=>s.aff.some(a=>AN(a.agent).toLowerCase().includes(h.ag.toLowerCase())))));
+  return`<div class="c"><h2>Historique</h2>${note()}<div class="fl">${fi('num','Référence ou n°')}<label>Type <select data-f="h.type">${opts(TN(),h.type,'Tous')}</select></label>${fi('loc','Localisation')}
+  ${fi('du','Du','date')}${fi('au','Au','date')}${fi('ag','Agent')}
+  <label>Statut <select data-f="h.st"><option value="">Tous</option>${Object.entries(LBL).map(([k,v])=>`<option value="${k}"${h.st===k?' selected':''}>${v}</option>`).join('')}</select></label></div>${tbl(l)}</div>`;
+}
+function vAdmin(){
+  if(!adm())return'<div class="c">Réservé à l’administrateur (connexion requise).</div>';
+  const col=(k,x)=>`<input type="color" value="${esc(x.couleur)}" data-col="${k}" data-n="${esc(x.nom)}" aria-label="Couleur de ${esc(x.nom)}">`;
+  return`<div class="c"><h2>Administration</h2><p class="m">Connecté : ${esc(S.admin)}</p>
+  <h3>Types de gardes <button class="s" data-a="addT">+ Type</button></h3><table>${C.types.map((t,i)=>`<tr><td>${col('types',t)}</td><td>${esc(t.nom)}</td><td class="m">${esc(t.dossier)}/AAAA-MM.json</td><td><button class="s" data-a="mvT" data-n="${esc(t.nom)}" data-d="-1"${i?'':' disabled'} aria-label="Monter">↑</button> <button class="s" data-a="mvT" data-n="${esc(t.nom)}" data-d="1"${i<C.types.length-1?'':' disabled'} aria-label="Descendre">↓</button></td></tr>`).join('')}</table>
+  <h3>Types de services <button class="s" data-a="addSv">+ Service</button></h3><table>${C.services.map(t=>`<tr><td>${col('services',t)}</td><td>${esc(t.nom)}</td><td class="m">${t.debut&&t.fin?t.debut+'–'+t.fin:'horaires à saisir'}</td></tr>`).join('')}</table>
+  <h3>Comptes</h3><p><button class="s" data-a="chpw">Changer mon mot de passe</button> <button class="s" data-a="addAdm">+ Compte administrateur</button></p></div>
+  <div class="c"><h3>Journal d’audit (100 derniers, mois chargés)</h3><table>${[...D.audit].reverse().slice(0,100).map(a=>`<tr><td>${fmt(a.le)}</td><td>${esc(a.user)} (${esc(a.role)})</td><td>${esc(a.action)}</td><td>${esc(a.objet)}</td><td>${esc(a.details)}</td></tr>`).join('')||'<tr><td>Aucun événement.</td></tr>'}</table></div>`;
+}
+function SV(g,ed,c){const l=g.services.filter(s=>s.aff.length).sort((a,b)=>rank(a.type)-rank(b.type));
+  return l.map(s=>`<div class="sv2"><b><i class="dot" style="background:${sc(s.type)}"></i>${esc(s.type)}</b> <span class="m">${hor(s.type).join('–')}</span><ul>${[...s.aff].sort((a,b)=>T(a.debut)-T(b.debut)||AN(a.agent).localeCompare(AN(b.agent))).map(a=>`<li>${esc(AN(a.agent))} · ${fmt(a.debut).slice(0,6)} ${tm(a.debut)}–${tm(a.fin)}<label class="m" title="Droit à la rémunération de piquet"><input type="checkbox" data-a="tgP" data-s="${s.id}" data-i="${a.id}"${isPq(a)?' checked':''}${ed?'':' disabled'}> piquet</label> ${ed?`<button class="s" data-a="editA" data-s="${s.id}" data-i="${a.id}" aria-label="Modifier l’affectation">✎</button>`:''}${c?`<button class="x" data-a="delA" data-s="${s.id}" data-i="${a.id}" aria-label="Retirer l’agent">✕</button>`:''}</li>`).join('')}</ul></div>`).join('')||'<p class="m">Aucun agent planifié.</p>'}
+function detail(){
+  const g=D.gardes.find(x=>x.id===S.sel);if(!g)return'<div class="c m">Sélectionnez une garde pour afficher sa fiche.</div>';
+  const ed=canEdit(g),c=g.statut==='en_cours'&&rw(),nm=S.role==='Consultation',row=(a,b)=>`<tr><td class="m">${a}</td><td>${b}</td></tr>`;
+  const w=[];g.services.forEach(s=>s.aff.forEach(a=>{if(!(T(a.fin)>T(a.debut)))w.push(AN(a.agent)+' : horaires incohérents');warns(D,{...a,nom:AN(a.agent)}).forEach(x=>w.push(AN(a.agent)+' : '+x))}));
+  const au=D.audit.filter(a=>a.objet===g.numero).slice(-6).reverse();
+  return`<div class="c"><h2>${esc(ref(g))} <span class="chip ${g.statut}">${LBL[g.statut]}</span></h2><table>${row('ID',esc(g.numero))}${row('Type',dot(g.type)+esc(g.type))}${row('Localisation',esc(g.localisation))}${g.provenance?row('Provenance',nm?'(masqué)':esc(g.provenance)):''}${g.tel_service?row('Téléphone de service',esc(g.tel_service)):''}${g.radio_service?row('Radio de service',esc(g.radio_service)):''}${row('Risques',nm?'(masqué)':esc(g.risques))}
+  ${row('Début',fmt(g.debut_prevu))}${row('Fin (selon les agents)',fmt(g.fin_reel||g.fin_prevue))}${g.traite_le?row('Traitée',fmt(g.traite_le)+' par '+esc(g.traite_par)):''}</table>
+  <p>${ed?'<button data-a="editG">Modifier</button> ':''}${rw()?'<button class="s" data-a="exportG">Exporter en PDF</button> ':''}${c?'<button data-a="clot">Clôturer</button> ':''}${g.statut==='a_traiter'&&rw()?'<button data-a="trait">Marquer traitée</button> ':''}${g.statut==='traitee'&&adm()?'<button class="x" data-a="reopen">Rouvrir</button>':''}${ed?' <button class="x" data-a="delG">Supprimer</button>':''}</p>
+  ${w.length?`<div class="wn"><b>À vérifier :</b><br>${w.map(esc).join('<br>')}</div>`:''}
+  <h3>Services et agents</h3>${SV(g,ed,c)}${c?'<p><button class="s" data-a="addA">+ Agents</button></p>':''}
+  <h3>Historique des modifications</h3>${au.map(a=>`<div class="m">${fmt(a.le)} · ${esc(a.user)} · ${esc(a.action)}${a.details?' — '+esc(a.details):''}</div>`).join('')||'<div class="m">Aucun événement.</div>'}</div>`;
+}
+function render(){
+  const ap=$('app'),pb=$('pan');pb.style.display=D?'':'none';ap.classList.toggle('nopan',!S.pan);pb.textContent=S.pan?'»':'«';
+  pb.setAttribute('aria-expanded',String(S.pan));pb.setAttribute('aria-label',S.pan?'Masquer le panneau de détail':'Afficher le panneau de détail');
+  if(!D){ap.innerHTML=`<div class="c"><h2>Connexion au dossier de données</h2><p>Choisissez le dossier partagé qui contient (ou contiendra) <code>${FILE}</code>. Les copies datées sont écrites dans <code>${BK}</code>.</p>
+    <p><button data-a="pick"${'showDirectoryPicker'in window?'':' disabled'}>Choisir le dossier partagé</button> <button class="s" data-a="resume">Reprendre le dossier précédent</button></p>
+    ${'showDirectoryPicker'in window?'':'<p class="er">Ce navigateur ne permet pas l’accès direct aux fichiers (File System Access API).</p>'}</div><div></div>`;return}
+  $('tadm').style.display=adm()?'':'none';
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===S.view));
+  $('n1').textContent='('+D.gardes.filter(g=>g.statut==='en_cours').length+')';$('n2').textContent='('+D.gardes.filter(g=>g.statut==='a_traiter').length+')';
+  ap.innerHTML=`<div>${{dash:vDash,cours:vCours,traiter:vTraiter,hist:vHist,admin:vAdmin}[S.view]()}</div><aside>${detail()}</aside>`;
+}
+
+/* ===== Actualisation périodique ===== */
+setInterval(async()=>{if(!dir||busy||!D)return;try{await pollOnce()}catch(e){setSt('Fichier illisible','k');showErr(new Error('Lecture impossible ou fichier invalide : '+e.message+'. Aucune écriture ne sera effectuée.'))}},5000);
+setInterval(()=>{if(D&&S.view==='cours'&&!$('dlg').open&&!busy)render()},30000);
+render();
+</script>
+</body>
+</html>
