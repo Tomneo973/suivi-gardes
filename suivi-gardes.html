@@ -4,13 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Suivi des gardes</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2032%2032%27%3E%3Crect%20width=%2732%27%20height=%2732%27%20rx=%276%27%20fill=%27%230b5cad%27/%3E%3Crect%20x=%275%27%20y=%277%27%20width=%2714%27%20height=%274%27%20rx=%272%27%20fill=%27%23fff%27/%3E%3Crect%20x=%2710%27%20y=%2714%27%20width=%2717%27%20height=%274%27%20rx=%272%27%20fill=%27%237ed39a%27/%3E%3Crect%20x=%277%27%20y=%2721%27%20width=%2712%27%20height=%274%27%20rx=%272%27%20fill=%27%23fff%27/%3E%3C/svg%3E">
 <style>
 :root{--b:#0b5cad;--t:#1d2430;--g:#5b6574;--l:#d3d8e0;--bg:#f4f5f7}
 *{box-sizing:border-box}
-body{margin:0;font:14px/1.45 "Segoe UI",system-ui,sans-serif;color:var(--t);background:var(--bg)}
+html{font-size:var(--fs,14px)}body{margin:0;font:1rem/1.45 "Segoe UI",system-ui,sans-serif;color:var(--t);background:var(--bg)}
 header{background:#fff;border-bottom:1px solid var(--l);padding:8px 14px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
 h1{font-size:1.1rem;margin:0}h2{font-size:1.05rem;margin:0 0 8px}h3{font-size:.95rem;margin:12px 0 4px}
-.m{color:var(--g);font-size:12px}.er{color:#b3261e}
+.m{color:var(--g);font-size:.85rem}.er{color:#b3261e}
 #st{font-weight:600;padding:2px 8px;border-radius:10px;background:#eee}
 #st.o{background:#dff3e4;color:#1b7a3d}#st.w{background:#fff3cd;color:#7a5a00}#st.k{background:#fdecea;color:#b3261e}
 nav{display:flex;gap:2px;padding:0 14px;background:#fff;border-bottom:1px solid var(--l);overflow:auto}
@@ -21,30 +22,32 @@ button.s{background:#fff;color:var(--b)}button.x{background:#b3261e;border-color
 :focus-visible{outline:3px solid #f2a900;outline-offset:2px}
 input,select,textarea{font:inherit;padding:4px 6px;border:1px solid var(--l);border-radius:4px;background:#fff;color:inherit}
 #err{display:none;margin:8px 14px 0;padding:8px 12px;border-left:5px solid #b3261e;background:#fdecea}
-#app{display:grid;grid-template-columns:minmax(0,1fr) 380px;column-gap:12px;padding:12px 34px 12px 14px;transition:grid-template-columns .25s ease,column-gap .25s ease}
+#app{display:grid;grid-template-columns:minmax(0,1fr) var(--pan,380px);column-gap:12px;padding:12px 34px 12px 14px;transition:grid-template-columns .25s ease,column-gap .25s ease}
 #app aside{min-width:0;overflow:hidden}#app.nopan{grid-template-columns:minmax(0,1fr) 0px;column-gap:0}#app.nopan aside{visibility:hidden}
 #pan{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:5;width:24px;height:72px;padding:0;font-size:16px;border-radius:6px 0 0 6px}
 @media(max-width:1000px){#app,#app.nopan{grid-template-columns:1fr;column-gap:0;row-gap:12px}#app.nopan aside{display:none}}
 .c{background:#fff;border:1px solid var(--l);border-radius:6px;padding:12px;margin-bottom:12px}
 table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--l);vertical-align:top}
 th[data-a]{cursor:pointer}tr[data-a]{cursor:pointer}tr[data-a]:hover{background:#eef3fa}
-.chip{font-size:11px;padding:1px 7px;border-radius:9px;background:#e6e9ee;font-weight:600;white-space:nowrap}
+.chip{font-size:.78rem;padding:1px 7px;border-radius:9px;background:#e6e9ee;font-weight:600;white-space:nowrap}
 .chip.en_cours{background:#dbeafe;color:#124a9c}.chip.a_traiter{background:#ffe9c2;color:#7a4a00}.chip.traitee{background:#dff3e4;color:#1b7a3d}
 .kpi{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin:10px 0}
 .kpi div{border:1px solid var(--l);border-radius:6px;padding:8px;background:#fff}.kpi b{display:block;font-size:1.4rem}
-.gw{position:relative}.gr{display:flex;height:50px;border-top:1px solid var(--l);cursor:pointer}
-.gl{width:170px;font-size:12px;padding:3px 6px 0 0;overflow:hidden}
+.gw{position:relative}.gr{display:flex;height:calc(var(--bar,36px) + 14px);border-top:1px solid var(--l);cursor:pointer}
+.gl{width:var(--lab,170px);font-size:.85rem;padding:3px 6px 0 0;overflow:hidden}
 .gt{position:relative;flex:1;background:repeating-linear-gradient(90deg,#bcc4cf 0 1px,transparent 1px 4.16667%),repeating-linear-gradient(90deg,#e7eaef 0 1px,transparent 1px 1.04167%)}
-.gh{display:flex;font-size:11px;color:var(--g)}.gh span{width:4.1667%}
-.gb{position:absolute;top:6px;height:34px;border-radius:5px;color:#fff;font-size:12px;font-weight:600;padding:8px 7px;overflow:hidden;white-space:nowrap}
+.gh{display:flex;font-size:.78rem;color:var(--g)}.gh span{width:4.1667%}
+.gb{position:absolute;top:6px;height:34px;border-radius:5px;color:#fff;font-size:.85rem;font-weight:600;padding:8px 7px;overflow:hidden;white-space:nowrap}
 .sg{position:absolute;top:26px;height:6px;border-radius:3px;background:#8aa0bd}
-.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}.gr.sub{height:30px;cursor:default;background:#fafbfc}.gr.sub .gb{top:4px;height:22px;font-size:11px;font-weight:400;padding:3px 5px;border-radius:4px}
-.gb.main{top:7px;height:36px;display:flex;align-items:center;justify-content:center;padding:0 10px;font-size:13px;font-weight:600;line-height:1}
-.gb.main .t,.gx .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}.kk{font-weight:400;font-size:11px;opacity:.85;margin-right:4px}.ss{opacity:.55;margin:0 9px}
-.gx{position:absolute;top:7px;height:36px;display:flex;align-items:center;padding:0 10px;border-radius:5px;color:#fff;font-size:13px;font-weight:600;overflow:hidden;box-shadow:0 0 0 2px #fff;z-index:1}svg text{font-size:10px;fill:#5b6574}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}.gr.sub{height:30px;cursor:default;background:#fafbfc}.gr.sub .gb{top:4px;height:var(--sv,22px);font-size:.8rem;font-weight:400;padding:3px 5px;border-radius:4px}
+.gb.main{top:7px;height:var(--bar,36px);display:flex;align-items:center;justify-content:center;padding:0 10px;font-size:.93rem;font-weight:600;line-height:1}
+.gb.main .t,.gx .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}.kk{font-weight:400;font-size:.8rem;opacity:.85;margin-right:4px}.ss{opacity:.55;margin:0 9px}
+.gx{position:absolute;top:7px;height:var(--bar,36px);display:flex;align-items:center;padding:0 10px;border-radius:5px;color:#fff;font-size:.93rem;font-weight:600;overflow:hidden;box-shadow:0 0 0 2px #fff;z-index:1}svg text{font-size:10px;fill:#5b6574}
 .now{position:absolute;top:0;bottom:0;width:2px;background:#d00;z-index:2}
+#clock{display:flex;flex-direction:column;align-items:flex-end;line-height:1.05;padding-left:6px}#clock b{font-size:var(--clk,34px);font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.lk{cursor:pointer;color:var(--b)}.lk:hover{text-decoration:underline}
 .sv2{border:1px solid var(--l);border-radius:5px;padding:6px 8px;margin:6px 0}.sv2 ul{margin:4px 0;padding-left:18px}
-.wn{background:#fff3cd;padding:6px 8px;border-radius:4px;margin:6px 0;font-size:12px}
+.wn{background:#fff3cd;padding:6px 8px;border-radius:4px;margin:6px 0;font-size:.85rem}
 dialog{border:1px solid var(--l);border-radius:8px;min-width:340px;max-width:92vw}
 dialog label{display:block;margin:7px 0}dialog input,dialog select,dialog textarea{width:100%}dialog input[type=checkbox]{width:auto;margin-right:8px}
 .fl{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:end;margin-bottom:8px}
@@ -59,6 +62,7 @@ dialog label{display:block;margin:7px 0}dialog input,dialog select,dialog textar
   <span style="flex:1"></span>
   <label class="m">Utilisateur <input id="user" size="14" placeholder="Votre nom"></label>
   <label class="m">Profil <select id="role"><option>Administrateur</option><option>Opérateur</option><option>Consultation</option></select></label>
+  <div id="clock"><b id="clk">--:--:--</b><span class="m" id="cdate"></span></div>
 </header>
 <nav id="nav">
   <button data-a="go" data-v="dash">Tableau de bord</button>
@@ -164,7 +168,10 @@ async function loadWindow(){let ch=false;const want=wanted();
     for(const mo of ms){const k=t.dossier+'/'+mo;if(MO[k])continue;let h;try{h=await dh.getFileHandle(mo+'.json')}catch(e){continue}
       const tx=await(await h.getFile()).text();const d=JSON.parse(tx);validate(d);MO[k]={h,t:tx,data:d};ch=true}}
   return ch}
-function rebuild(){C=MO['@cfg'].data;const m=new Map(),au=[];
+const UID={police:14,barre:36,service:22,libelle:170,panneau:380,horloge:34},UIR={police:[11,22],barre:[22,64],service:[16,40],libelle:[120,320],panneau:[280,560],horloge:[20,64]};
+const UI=()=>({...UID,...(C?.affichage||{})});
+function applyUi(){const u=UI(),r=document.documentElement.style;r.setProperty('--fs',u.police+'px');r.setProperty('--bar',u.barre+'px');r.setProperty('--sv',u.service+'px');r.setProperty('--lab',u.libelle+'px');r.setProperty('--pan',u.panneau+'px');r.setProperty('--clk',u.horloge+'px')}
+function rebuild(){C=MO['@cfg'].data;applyUi();const m=new Map(),au=[];
   for(const[k,e]of Object.entries(MO)){au.push(...e.data.audit);if(k!=='@cfg')e.data.gardes.forEach(g=>{g._k=k;m.set(g.id,g)})}
   D={gardes:[...m.values()],audit:au.sort((a,b)=>a.le<b.le?-1:1)}}
 async function pollOnce(q){let ch=await loadWindow();
@@ -289,6 +296,17 @@ function pdfExport(g,du,au,reels){const u=URL.createObjectURL(new Blob([pdfBytes
 
 /* ===== Actions ===== */
 const cur=()=>G(D,S.sel);
+async function mkG(f,from){const id=uid();
+  await commit(async ctx=>{const d=await ctx.file(kOf(f.type,toI(f.debut_prevu)));
+    const g={id,statut:'en_cours',cree_le:new Date().toISOString(),v:1,services:[],fin_prevue:'',fin_reel:'',liens:[]};
+    apply(g,f,KG);g.debut_reel=g.debut_prevu;d.gardes.push(g);let det='';
+    if(from){const src=D.gardes.find(z=>z.id===from),sx=G(await ctx.file(src._k),from);if(!sx)throw new Error('Garde d’origine introuvable.');
+      sx.liens=[...(sx.liens||[]),{id,numero:g.numero}];sx.v++;g.liens=[{id:from,numero:sx.numero}];det='suite de '+sx.numero}
+    return{action:'Création garde',objet:g.numero,details:det}});
+  S.sel=id;render()}
+function LK(g,ed){const tk=z=>z.x?T(z.x.debut_reel||z.x.debut_prevu):0,del=id=>ed?` <button class="x" data-a="delier" data-id="${id}" aria-label="Supprimer le lien">✕</button>`:'';
+  const l=(g.liens||[]).map(k=>({k,x:D.gardes.find(z=>z.id===k.id)})).sort((a,b)=>tk(a)-tk(b)),me=T(g.debut_reel||g.debut_prevu);
+  return`<h3>Surveillances liées</h3><ul>${l.map(({k,x})=>x?`<li><span class="lk" tabindex="0" data-a="selG" data-id="${x.id}">${dot(x.type)}<b>${esc(ref(x))}</b> · ${esc(x.numero)}</span> <span class="chip ${x.statut}">${LBL[x.statut]}</span> <span class="m">${tk({x})<me?'avant':'après'} · ${fmt(x.debut_reel||x.debut_prevu)}</span>${del(x.id)}</li>`:`<li class="m">${esc(k.numero)} (non chargée : « Tout charger »)${del(k.id)}</li>`).join('')||'<li class="m">Aucune.</li>'}</ul>${ed?'<p><button class="s" data-a="lier">+ Lier à une garde</button> <button class="s" data-a="suite">+ Créer la suite</button></p>':''}`}
 const H={
   go:t=>{S.view=t.v;render()},close:()=>$('dlg').close(),
   selG:t=>{S.sel=t.id;if(!S.pan){S.pan=true;ls('gpan','1')}render()},
@@ -300,12 +318,22 @@ const H={
   resume:async()=>{const h=await idbGet('dir');if(!h)throw new Error('Aucun dossier mémorisé.');
     if(await h.queryPermission({mode:'readwrite'})!=='granted'&&await h.requestPermission({mode:'readwrite'})!=='granted')throw new Error('Permission refusée.');await openDir(h)},
   today:()=>{S.day=ymd(new Date());render()},
-  newG:()=>{const n=new Date();n.setSeconds(0,0);const id=uid();
-    form('Nouvelle garde',gf({debut_prevu:n.toISOString(),type:TN()[0]}),async f=>{f.numero=f.numero.trim();dupChk(f.numero,'');
-      await commit(async ctx=>{const d=await ctx.file(kOf(f.type,toI(f.debut_prevu)));
-        const g={id,statut:'en_cours',cree_le:new Date().toISOString(),v:1,services:[],fin_prevue:'',fin_reel:''};
-        apply(g,f,KG);g.debut_reel=g.debut_prevu;d.gardes.push(g);return{action:'Création garde',objet:g.numero}});
-      S.sel=id;render()})},
+  newG:()=>{const n=new Date();n.setSeconds(0,0);form('Nouvelle garde',gf({debut_prevu:n.toISOString(),type:TN()[0]}),async f=>{f.numero=f.numero.trim();dupChk(f.numero,'');await mkG(f,null)})},
+  suite:()=>{const g=cur(),pre={personne:g.personne,type:g.type,provenance:g.provenance,risques:g.risques,debut_prevu:g.fin_reel||g.fin_prevue||new Date().toISOString()};
+    form('Créer la suite de '+esc(g.numero),gf(pre),async f=>{f.numero=f.numero.trim();dupChk(f.numero,'');await mkG(f,g.id)})},
+  lier:()=>{const g=cur(),v0=g.v;form('Lier à une autre surveillance',[{k:'ref',l:'ID de la garde à lier (ou nom de la personne)',r:1,v:''}],async f=>{
+    const t=f.ref.trim().toLowerCase(),c=D.gardes.filter(z=>z.id!==g.id&&(z.numero.toLowerCase()===t||(z.personne||'').toLowerCase()===t||(z.numero+' '+(z.personne||'')).toLowerCase()===t));
+    if(!c.length)throw new Error('Aucune garde chargée avec cet ID. Si elle est ancienne, utilisez « Tout charger ».');
+    if(c.length>1)throw new Error('Plusieurs gardes correspondent : '+c.map(z=>z.numero+' ('+fmt(z.debut_prevu).slice(0,10)+')').join(', ')+'. Saisissez l’ID exact.');
+    const o=c[0];if((g.liens||[]).some(k=>k.id===o.id))throw new Error('Ces deux gardes sont déjà liées.');
+    await commit(async ctx=>{const a=G(await ctx.file(g._k),g.id),b=G(await ctx.file(o._k),o.id);if(!a||!b)throw new Error('Garde introuvable.');if(a.v!==v0)throw conflit();
+      a.liens=[...(a.liens||[]),{id:b.id,numero:b.numero}];b.liens=[...(b.liens||[]),{id:a.id,numero:a.numero}];a.v++;b.v++;
+      return{action:'Lien entre gardes',objet:a.numero,details:'lié à '+b.numero}})})},
+  delier:async t=>{const g=cur();if(!confirm('Supprimer le lien avec cette garde ?'))return;
+    await commit(async ctx=>{const a=G(await ctx.file(g._k),g.id);if(!a)throw new Error('Garde introuvable.');a.liens=(a.liens||[]).filter(k=>k.id!==t.id);a.v++;
+      const o=D.gardes.find(z=>z.id===t.id);if(o){const b=G(await ctx.file(o._k),o.id);if(b){b.liens=(b.liens||[]).filter(k=>k.id!==g.id);b.v++}}
+      return{action:'Lien supprimé',objet:a.numero,details:o?o.numero:t.id}})},
+  rstUi:()=>commit(async ctx=>{const cf=await ctx.cfg();delete cf.affichage;return{cfg:1,action:'Affichage',objet:'valeurs par défaut'}}),
   editG:()=>{const g=cur(),v0=g.v;form('Modifier la garde '+esc(g.numero),gf(g),async f=>{f.numero=f.numero.trim();dupChk(f.numero,g.id);if(f.fin_prevue)chkT(f.debut_prevu,f.fin_prevue);
     await commit(async ctx=>{const k0=g._k,d0=await ctx.file(k0),x=G(d0,g.id);if(!x)throw new Error('Garde introuvable.');if(x.v!==v0)throw conflit();
       const dt=apply(x,f,KG);x.debut_reel=x.debut_prevu;recalc(x);x.v++;const k1=kOf(x.type,x.debut_prevu);
@@ -313,7 +341,8 @@ const H={
       return{action:'Modification garde',objet:x.numero,details:dt+(k1!==k0?' ; déplacée vers '+k1:'')}})})},
   delG:async()=>{const g=cur();if(!confirm('Supprimer définitivement la garde '+ref(g)+' ('+g.numero+') ?\nLes copies datées antérieures du dossier « sauvegardes » permettent de la retrouver.'))return;
     await commit(async ctx=>{const d=await ctx.file(g._k),k=d.gardes.findIndex(x=>x.id===g.id);if(k<0)throw new Error('Garde introuvable (déjà supprimée ?).');if(d.gardes[k].v!==g.v)throw conflit();
-      const x=d.gardes.splice(k,1)[0];return{action:'Suppression garde',objet:x.numero,details:x.type+' — début '+fmt(x.debut_prevu)}});S.sel=null;S.open.delete(g.id);render()},
+      const x=d.gardes.splice(k,1)[0];for(const l of x.liens||[]){const o=D.gardes.find(z=>z.id===l.id);if(o){const b=G(await ctx.file(o._k),o.id);if(b){b.liens=(b.liens||[]).filter(q=>q.id!==x.id);b.v++}}}
+      return{action:'Suppression garde',objet:x.numero,details:x.type+' — début '+fmt(x.debut_prevu)}});S.sel=null;S.open.delete(g.id);render()},
   addA:()=>{const g=cur(),v0=g.v;
     form('Affecter des agents',[{k:'service',l:'Service',o:C.services.map(z=>z.nom),v:C.services[0]?.nom},{k:'agent',l:'Nom(s) des agents (séparés par une virgule)',r:1,v:''},{k:'piquet',l:'Droit à la rémunération de piquet (agent arrivé sur la surveillance en moins de 3 h)',t:'checkbox',v:false},
       {k:'du',l:'Du (jour)',t:'date',r:1,v:toL(g.debut_prevu).slice(0,10)},{k:'au',l:'Au (jour, facultatif : plusieurs jours de suite)',t:'date',v:''},
@@ -371,7 +400,9 @@ const H={
 document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(t&&H[t.dataset.a])Promise.resolve().then(()=>H[t.dataset.a](t.dataset)).catch(showErr)});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('tr[data-a],th[data-a],.gr[data-a]'))e.target.click()});
 document.addEventListener('change',async e=>{const t=e.target,c=t.dataset.col;
-  try{if(c){await commit(async ctx=>{const cf=await ctx.cfg(),x=cf[c].find(z=>z.nom===t.dataset.n);x.couleur=t.value;return{cfg:1,action:'Couleur',objet:t.dataset.n,details:t.value}});return}
+  try{if(t.dataset.ui){const k=t.dataset.ui,[lo,hi]=UIR[k],v=Math.min(hi,Math.max(lo,Math.round(+t.value||UID[k])));
+    await commit(async ctx=>{const cf=await ctx.cfg();cf.affichage={...(cf.affichage||{}),[k]:v};return{cfg:1,action:'Affichage',objet:k,details:String(v)}});return}
+    if(c){await commit(async ctx=>{const cf=await ctx.cfg(),x=cf[c].find(z=>z.nom===t.dataset.n);x.couleur=t.value;return{cfg:1,action:'Couleur',objet:t.dataset.n,details:t.value}});return}
     const f=t.dataset.f;if(!f)return;const[a,b]=f.split('.');if(b)S[a][b]=t.value;else S[a]=t.value;if(await loadWindow())rebuild();render()}catch(x){showErr(x)}});
 $('user').value=S.user;$('role').value=S.role;$('dlg').addEventListener('close',()=>{$('role').value=S.role;if(D)render()});
 $('user').onchange=e=>{S.user=e.target.value.trim();ls('gu',S.user)};
@@ -385,7 +416,7 @@ const tIdx=g=>{const i=C.types.findIndex(t=>t.nom===g.type);return i<0?99:i};
 const gv=(g,k)=>k==='type'?tIdx(g):k==='ref'?ref(g).toLowerCase():k==='debut'?T(g.debut_reel||g.debut_prevu):k==='fin'?T(g.fin_reel||g.fin_prevue)||0:g[k];
 const opts=(l,v,all)=>(all?`<option value="">${all}</option>`:'')+l.map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('');
 function tbl(l){const{k,d}=S.sort;l=[...l].sort((a,b)=>(gv(a,k)>gv(b,k)?1:-1)*d);
-  return l.length?`<table><tr>${COLS.map(c=>`<th tabindex="0" data-a="sort" data-k="${c[0]}">${c[1]}${k===c[0]?(d>0?' ▲':' ▼'):''}</th>`).join('')}</tr>${l.map(g=>`<tr tabindex="0" data-a="selG" data-id="${g.id}"><td><b>${esc(ref(g))}</b></td><td class="m">${esc(g.numero)}</td><td>${dot(g.type)}${esc(g.type)}</td><td>${esc(g.localisation)}</td><td>${fmt(g.debut_reel||g.debut_prevu)}</td><td>${fmt(g.fin_reel||g.fin_prevue)}</td><td><span class="chip ${g.statut}">${LBL[g.statut]}</span></td></tr>`).join('')}</table>`:'<p class="m">Aucune garde.</p>'}
+  return l.length?`<table><tr>${COLS.map(c=>`<th tabindex="0" data-a="sort" data-k="${c[0]}">${c[1]}${k===c[0]?(d>0?' ▲':' ▼'):''}</th>`).join('')}</tr>${l.map(g=>`<tr tabindex="0" data-a="selG" data-id="${g.id}"><td><b>${esc(ref(g))}</b>${(g.liens||[]).length?' 🔗':''}</td><td class="m">${esc(g.numero)}</td><td>${dot(g.type)}${esc(g.type)}</td><td>${esc(g.localisation)}</td><td>${fmt(g.debut_reel||g.debut_prevu)}</td><td>${fmt(g.fin_reel||g.fin_prevue)}</td><td><span class="chip ${g.statut}">${LBL[g.statut]}</span></td></tr>`).join('')}</table>`:'<p class="m">Aucune garde.</p>'}
 
 function stats(){
   const f=S.f,a=f.du?+new Date(f.du+'T00:00'):-1/0,b=f.au?+new Date(f.au+'T00:00')+864e5:1/0;
@@ -435,13 +466,13 @@ function vCours(){
     const ts=[...new Set([...C.services.filter(z=>z.debut&&z.fin).map(z=>z.nom),...Object.keys(by)])].sort((a,b)=>rank(a)-rank(b));
     return ts.map(t=>{const m={};(by[t]||[]).forEach(a=>{const k=a.debut+'|'+a.fin;(m[k]||(m[k]={a,n:[]})).n.push(a.agent+(isPq(a)?' (piquet)':''))});
       const it=Object.values(m).sort((p,q)=>T(p.a.debut)-T(q.a.debut)),ln=[];it.forEach(x=>{let k=ln.findIndex(e=>e<=T(x.a.debut));if(k<0)k=ln.length;ln[k]=T(x.a.fin);x.k=k});
-      return`<div class="gr sub" style="height:${Math.max(1,ln.length)*26+4}px"><div class="gl">&nbsp;&nbsp;↳ <i class="dot" style="background:${sc(t)}"></i>${esc(t)}</div><div class="gt">${it.map(x=>{const a=x.a,nm=x.n.join(', '),hh=tm(a.debut)+'–'+tm(a.fin);
-        return bar(T(a.debut),T(a.fin),sc(t),(T(a.debut)<d0?'◂ ':'')+esc(nm)+' · '+hh+(T(a.fin)>d1?' ▸':''),t+' · '+nm+' · '+hh,'top:'+(3+x.k*26)+'px')}).join('')||'<span class="m" style="display:block;padding:6px 8px">aucun agent</span>'}</div></div>`}).join('')};
+      return`<div class="gr sub" style="height:${Math.max(1,ln.length)*(UI().service+4)+4}px"><div class="gl">&nbsp;&nbsp;↳ <i class="dot" style="background:${sc(t)}"></i>${esc(t)}</div><div class="gt">${it.map(x=>{const a=x.a,nm=x.n.join(', '),hh=tm(a.debut)+'–'+tm(a.fin);
+        return bar(T(a.debut),T(a.fin),sc(t),(T(a.debut)<d0?'◂ ':'')+esc(nm)+' · '+hh+(T(a.fin)>d1?' ▸':''),t+' · '+nm+' · '+hh,'top:'+(3+x.k*(UI().service+4))+'px')}).join('')||'<span class="m" style="display:block;padding:6px 8px">aucun agent</span>'}</div></div>`}).join('')};
   const rows=l.map(g=>{const s=T(g.debut_reel||g.debut_prevu),e=T(g.fin_reel||g.fin_prevue)||Math.max(s,now),o=S.open.has(g.id),c=tc(g.type),it=info(g),w=pc(e)-pc(s);
     const h=`<span class="t">${it.map(([k,v])=>(k?`<span class="kk">${k}</span>`:'')+esc(v)).join('<span class="ss">|</span>')}</span>`,ti=it.map(([k,v])=>(k?k+' ':'')+v).join(' | ');
     const chip=w<55?`<div class="gx" title="${esc(ti)}" style="background:${c};${pc(s)+w/2<50?`left:${pc(e)}%;max-width:${100-pc(e)}%`:`right:${100-pc(s)}%;max-width:${pc(s)}%`}">${h}</div>`:'';
-    return`<div class="gr" tabindex="0" data-a="togG" data-id="${g.id}"><div class="gl">${o?'▾':'▸'} <b>${esc(ref(g))}</b><br>${dot(g.type)}${esc(g.type)}</div><div class="gt">${bar(s,e,c,w<55?'':h,ti,'','main')}${chip}</div></div>${o?svRows(g):''}`}).join('');
-  const nl=S.day===ymd(new Date())?`<div class="now" style="left:calc(170px + (100% - 170px) * ${(now-d0)/864e5})" title="Heure actuelle"></div>`:'';
+    return`<div class="gr" tabindex="0" data-a="togG" data-id="${g.id}"><div class="gl">${o?'▾':'▸'} <b>${esc(ref(g))}</b>${(g.liens||[]).length?` <span title="Surveillances liées : ${esc(g.liens.map(k=>k.numero).join(', '))}">🔗</span>`:''}<br>${dot(g.type)}${esc(g.type)}</div><div class="gt">${bar(s,e,c,w<55?'':h,ti,'','main')}${chip}</div></div>${o?svRows(g):''}`}).join('');
+  const nl=S.day===ymd(new Date())?`<div class="now" style="left:calc(var(--lab,170px) + (100% - var(--lab,170px)) * ${(now-d0)/864e5})" title="Heure actuelle"></div>`:'';
   return`<div class="c"><h2>Gardes en cours</h2>${note()}<div class="fl"><label>Jour <input type="date" data-f="day" value="${S.day}"></label><button class="s" data-a="today">Aujourd’hui</button><label>Tri <select data-f="gs">${[['type','Type de garde (ordre défini)'],['debut','Début'],['ref','Référence']].map(([v,t])=>`<option value="${v}"${S.gs===v?' selected':''}>${t}</option>`).join('')}</select></label>${rw()?'<button data-a="newG">+ Nouvelle garde</button>':''}</div>
   <div class="gw"><div class="gr" style="height:20px;border:0;cursor:default"><div class="gl"></div><div class="gt gh" style="background:none">${Array.from({length:24},(_,h)=>`<span>${h%2?'':P(h)}</span>`).join('')}</div></div>${rows||'<p class="m">Aucune garde en cours ce jour-là.</p>'}${nl}</div>
   <p class="m">Échelle 00:00–24:00. Cliquez sur une garde pour déplier ses services : une ligne par service (Matin, Après-midi, Nuit), avec les noms des agents dans les barres. Les gardes à cheval sur minuit sont découpées par jour (◂ ▸).</p></div>`;
@@ -456,12 +487,15 @@ function vHist(){
   ${fi('du','Du','date')}${fi('au','Au','date')}${fi('ag','Agent')}
   <label>Statut <select data-f="h.st"><option value="">Tous</option>${Object.entries(LBL).map(([k,v])=>`<option value="${k}"${h.st===k?' selected':''}>${v}</option>`).join('')}</select></label></div>${tbl(l)}</div>`;
 }
+function uiForm(){const u=UI(),f=(k,l)=>`<label>${l} <input type="number" style="width:76px" data-ui="${k}" min="${UIR[k][0]}" max="${UIR[k][1]}" value="${u[k]}"> <span class="m">px</span></label>`;
+  return`<h3>Affichage (appliqué à tous les postes)</h3><div class="fl">${f('police','Police générale')}${f('barre','Hauteur des barres de garde')}${f('service','Hauteur des barres de service')}${f('libelle','Largeur de la colonne des libellés')}${f('panneau','Largeur du panneau latéral')}${f('horloge','Taille de l’horloge')}</div><p><button class="s" data-a="rstUi">Rétablir les valeurs par défaut</button></p>`}
 function vAdmin(){
   if(!adm())return'<div class="c">Réservé à l’administrateur (connexion requise).</div>';
   const col=(k,x)=>`<input type="color" value="${esc(x.couleur)}" data-col="${k}" data-n="${esc(x.nom)}" aria-label="Couleur de ${esc(x.nom)}">`;
   return`<div class="c"><h2>Administration</h2><p class="m">Connecté : ${esc(S.admin)}</p>
   <h3>Types de gardes <button class="s" data-a="addT">+ Type</button></h3><table>${C.types.map((t,i)=>`<tr><td>${col('types',t)}</td><td>${esc(t.nom)}</td><td class="m">${esc(t.dossier)}/AAAA-MM.json</td><td><button class="s" data-a="mvT" data-n="${esc(t.nom)}" data-d="-1"${i?'':' disabled'} aria-label="Monter">↑</button> <button class="s" data-a="mvT" data-n="${esc(t.nom)}" data-d="1"${i<C.types.length-1?'':' disabled'} aria-label="Descendre">↓</button></td></tr>`).join('')}</table>
   <h3>Types de services <button class="s" data-a="addSv">+ Service</button></h3><table>${C.services.map(t=>`<tr><td>${col('services',t)}</td><td>${esc(t.nom)}</td><td class="m">${t.debut&&t.fin?t.debut+'–'+t.fin:'horaires à saisir'}</td></tr>`).join('')}</table>
+  ${uiForm()}
   <h3>Comptes</h3><p><button class="s" data-a="chpw">Changer mon mot de passe</button> <button class="s" data-a="addAdm">+ Compte administrateur</button></p></div>
   <div class="c"><h3>Journal d’audit (100 derniers, mois chargés)</h3><table>${[...D.audit].reverse().slice(0,100).map(a=>`<tr><td>${fmt(a.le)}</td><td>${esc(a.user)} (${esc(a.role)})</td><td>${esc(a.action)}</td><td>${esc(a.objet)}</td><td>${esc(a.details)}</td></tr>`).join('')||'<tr><td>Aucun événement.</td></tr>'}</table></div>`;
 }
@@ -476,7 +510,7 @@ function detail(){
   ${row('Début',fmt(g.debut_prevu))}${row('Fin (selon les agents)',fmt(g.fin_reel||g.fin_prevue))}${g.traite_le?row('Traitée',fmt(g.traite_le)+' par '+esc(g.traite_par)):''}</table>
   <p>${ed?'<button data-a="editG">Modifier</button> ':''}${rw()?'<button class="s" data-a="exportG">Exporter en PDF</button> ':''}${c?'<button data-a="clot">Clôturer</button> ':''}${g.statut==='a_traiter'&&rw()?'<button data-a="trait">Marquer traitée</button> ':''}${g.statut==='traitee'&&adm()?'<button class="x" data-a="reopen">Rouvrir</button>':''}${ed?' <button class="x" data-a="delG">Supprimer</button>':''}</p>
   ${w.length?`<div class="wn"><b>À vérifier :</b><br>${w.map(esc).join('<br>')}</div>`:''}
-  <h3>Services et agents</h3>${SV(g,ed,c)}${c?'<p><button class="s" data-a="addA">+ Agents</button></p>':''}
+  ${LK(g,ed)}<h3>Services et agents</h3>${SV(g,ed,c)}${c?'<p><button class="s" data-a="addA">+ Agents</button></p>':''}
   <h3>Historique des modifications</h3>${au.map(a=>`<div class="m">${fmt(a.le)} · ${esc(a.user)} · ${esc(a.action)}${a.details?' — '+esc(a.details):''}</div>`).join('')||'<div class="m">Aucun événement.</div>'}</div>`;
 }
 function render(){
@@ -493,6 +527,9 @@ function render(){
 
 /* ===== Actualisation périodique ===== */
 setInterval(async()=>{if(!dir||busy||!D)return;try{await pollOnce()}catch(e){setSt('Fichier illisible','k');showErr(new Error('Lecture impossible ou fichier invalide : '+e.message+'. Aucune écriture ne sera effectuée.'))}},5000);
+const DJ=['dim.','lun.','mar.','mer.','jeu.','ven.','sam.'];
+function tick(){const d=new Date();$('clk').textContent=P(d.getHours())+':'+P(d.getMinutes())+':'+P(d.getSeconds());$('cdate').textContent=DJ[d.getDay()]+' '+P(d.getDate())+'.'+P(d.getMonth()+1)+'.'+d.getFullYear()}
+tick();setInterval(tick,1000);
 setInterval(()=>{if(D&&S.view==='cours'&&!$('dlg').open&&!busy)render()},30000);
 render();
 </script>
