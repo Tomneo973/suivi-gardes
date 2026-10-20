@@ -91,6 +91,55 @@ const S={view:'dash',sel:null,pan:ls('gpan')!=='0',gs:'type',all:false,admin:nul
 let D=null,C=null,dir=null,busy=false;const MO={};
 const rw=()=>S.role!=='Consultation',adm=()=>S.role==='Administrateur',canEdit=g=>adm()||(rw()&&g.statut!=='traitee');
 const G=(d,id)=>d.gardes.find(g=>g.id===id),AN=a=>a||'?',isPq=a=>a.piquet===true||a.mode==='piquet';
+const nz=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+const PL=()=>C?.pool||[],pcan=p=>p.nom.toUpperCase()+' '+p.prenom,dh=m=>{m=Math.round(m);return Math.floor(m/60)+'h'+P(m%60)};
+/* Agent du pool : retrouvé par matricule, "nom prénom", "prénom nom" ou nom seul s'il est unique ; sinon agent hors pool, gardé tel que saisi */
+function resolveAg(txt){const t=nz(txt),pl=PL();if(!t)return{agent:'',mat:''};
+  let m=pl.filter(p=>nz(p.mat)===t);
+  if(!m.length)m=pl.filter(p=>nz(p.nom+' '+p.prenom)===t||nz(p.prenom+' '+p.nom)===t);
+  if(!m.length)m=pl.filter(p=>nz(p.nom)===t);
+  if(m.length>1)throw new Error('Plusieurs agents du pool correspondent à « '+String(txt).trim()+' » : '+m.map(p=>pcan(p)+' ('+p.mat+')').join(', ')+'. Précisez avec le prénom ou le matricule.');
+  return m.length?{agent:pcan(m[0]),mat:m[0].mat,p:m[0]}:{agent:String(txt).trim(),mat:''}}
+/* LTR : règles modifiables dans l'administration */
+const LTRD={jours:6,repos:10,nuit:11,jour:13},LTRC=()=>({...LTRD,...(C?.ltr||{})}),isNightSv=t=>/nuit/i.test(t||'');
+function shiftsAll(){const m=new Map();D.gardes.forEach(g=>g.services.forEach(v=>{if(v.type==='Pause')return;v.aff.forEach(a=>{if(!a.mat)return;const r=a.debut_reel&&a.fin_reel,s=T(r?a.debut_reel:a.debut),e=T(r?a.fin_reel:a.fin);if(isNaN(s)||isNaN(e))return;
+  if(!m.has(a.mat))m.set(a.mat,[]);m.get(a.mat).push({id:a.id,mat:a.mat,nom:a.agent,type:v.type,s,e})})}));return m}
+function ltrOf(list){const R=LTRC(),out=new Map(),add=(s,m)=>{if(!out.has(s.id))out.set(s.id,[]);out.get(s.id).push(m)};
+  list.sort((a,b)=>a.s-b.s);let me=-1/0;
+  list.forEach((s,i)=>{const h=(s.e-s.s)/36e5,nt=isNightSv(s.type),lim=nt?R.nuit:R.jour;
+    if(h>lim)add(s,'service de '+dh(h*60)+' (maximum '+lim+' h '+(nt?'de nuit':'de jour')+')');
+    if(i){const gap=(s.s-me)/36e5;if(gap<R.repos)add(s,'repos de '+dh(Math.max(0,gap)*60)+' avant ce service (minimum '+R.repos+' h)')}
+    me=Math.max(me,s.e)});
+  const ds=[...new Set(list.map(s=>ymd(new Date(s.s))))].sort();let run=[];
+  const flush=()=>{run.forEach((d,k)=>{if(k>=R.jours)list.filter(s=>ymd(new Date(s.s))===d).forEach(s=>add(s,'jour '+(k+1)+' consécutif (maximum '+R.jours+')'))});run=[]};
+  ds.forEach(d=>{if(run.length&&Math.round((+new Date(d+'T12:00')-+new Date(run[run.length-1]+'T12:00'))/864e5)!==1)flush();run.push(d)});flush();return out}
+function ltrIndex(){const out=new Map();shiftsAll().forEach(l=>ltrOf(l.map(x=>({...x}))).forEach((ms,id)=>out.set(id,ms)));return out}
+/* Nouvelles infractions provoquées par l'entrée de ces services (agents du pool uniquement) */
+function ltrCheck(cands,excl){const all=shiftsAll(),res=[];
+  [...new Set(cands.map(c=>c.mat))].forEach(mat=>{const ex=(all.get(mat)||[]).filter(x=>x.id!==excl),nw=cands.filter(c=>c.mat===mat).map((c,i)=>({id:'new'+i,mat,nom:c.nom,type:c.type,s:c.s,e:c.e}));
+    const b=ltrOf(ex.map(x=>({...x}))),a=ltrOf([...ex,...nw].map(x=>({...x}))),k=(id,m)=>id+'|'+m,bs=new Set([...b].flatMap(([id,ms])=>ms.map(m=>k(id,m)))),L=[...ex,...nw];
+    a.forEach((ms,id)=>ms.forEach(m=>{if(!bs.has(k(id,m))){const x=L.find(z=>z.id===id);res.push(x.nom+' — '+fmt(new Date(x.s).toISOString()).slice(0,5)+' '+x.type+' : '+m)}}))});return res}
+function agStats(){const m=new Map(),sh=shiftsAll();
+  D.gardes.forEach(g=>g.services.forEach(v=>{if(v.type==='Pause')return;v.aff.forEach(a=>{if(!a.mat)return;const r=a.debut_reel&&a.fin_reel,h=(T(r?a.fin_reel:a.fin)-T(r?a.debut_reel:a.debut))/36e5;
+    if(!m.has(a.mat))m.set(a.mat,{n:0,h:0,pq:0,lt:0});const o=m.get(a.mat);o.n++;o.h+=h||0;if(isPq(a))o.pq++})}));
+  sh.forEach((l,mat)=>{if(m.has(mat))m.get(mat).lt=ltrOf(l.map(x=>({...x}))).size});return m}
+const AGF=p=>[{k:'mat',l:'Matricule',r:1,v:p.mat},{k:'nom',l:'Nom',r:1,v:p.nom},{k:'prenom',l:'Prénom',r:1,v:p.prenom},{k:'contrat',l:'Contrat',v:p.contrat},{k:'actif',l:'Agent actif',t:'checkbox',v:p.actif!==false}];
+function poolView(){const st=agStats(),q=nz(S.pf||''),pl=[...PL()].sort((a,b)=>nz(a.nom+' '+a.prenom).localeCompare(nz(b.nom+' '+b.prenom))).filter(p=>!q||nz([p.mat,p.nom,p.prenom,p.contrat].join(' ')).includes(q));
+  return`<h3>Pool d’agents (${PL().length}) <button class="s" data-a="poolAdd">+ Agent</button> <button class="s" data-a="poolImp">Importer une liste</button></h3>
+  <div class="fl"><label>Rechercher <input data-f="pf" value="${esc(S.pf||'')}"></label></div>
+  <table><tr><th>Matricule</th><th>Nom</th><th>Prénom</th><th>Contrat</th><th>Statut</th><th>Services</th><th>Heures</th><th>Piquets</th><th>Alertes LTR</th><th></th></tr>${pl.map(p=>{const o=st.get(p.mat)||{n:0,h:0,pq:0,lt:0};
+    return`<tr${p.actif===false?' class="m"':''}><td>${esc(p.mat)}</td><td>${esc(p.nom)}</td><td>${esc(p.prenom)}</td><td>${esc(p.contrat)}</td><td>${p.actif===false?'inactif':'actif'}</td><td>${o.n}</td><td>${Math.round(o.h*10)/10} h</td><td>${o.pq}</td><td>${o.lt||''}</td><td><button class="s" data-a="poolEdit" data-m="${esc(p.mat)}" aria-label="Modifier">✎</button> <button class="s" data-a="poolTog" data-m="${esc(p.mat)}">${p.actif===false?'Activer':'Désactiver'}</button></td></tr>`}).join('')||'<tr><td>Aucun agent. Ajoutez-en ou importez une liste.</td></tr>'}</table>
+  <p class="m">Suivi calculé sur les mois chargés. Un agent hors pool reste saisissable librement, sans suivi ni contrôle LTR. Renommer un agent ne modifie pas les plannings déjà saisis.</p>`}
+function ltrForm(){const r=LTRC(),f=(k,l)=>`<label>${l} <input type="number" style="width:64px" data-ltr="${k}" min="1" max="99" value="${r[k]}"></label>`;
+  return`<h3>Contrôle LTR (agents du pool)</h3><div class="fl">${f('jours','Jours consécutifs max')}${f('repos','Repos minimum entre 2 services (h)')}${f('nuit','Durée max d’un service de nuit (h)')}${f('jour','Durée max d’un service de jour (h)')}</div><p class="m">Une alerte s’affiche quand un agent du pool enfreint une règle à son entrée en planification ; les infractions restent signalées par ⚠ dans le Gantt et dans la fiche. Le service de nuit est celui nommé « Nuit ».</p>`}
+/* Référence semi-automatique : lettre = mois × type (A patient janvier, B détenu janvier, C patient février…), puis 01 à 99 */
+const refKind=t=>/d[ée]tenu/i.test(t||'')?1:/patient/i.test(t||'')?0:-1;
+const refLetter=(t,iso)=>{const k=refKind(t),d=new Date(T(iso));return k<0||isNaN(d)?'':String.fromCharCode(65+d.getMonth()*2+k)};
+const refNext=(t,iso,skip)=>{const L=refLetter(t,iso);if(!L)return'';const y=new Date(T(iso)).getFullYear();
+  const used=D.gardes.filter(g=>g.id!==skip&&(g.numero||'').toUpperCase().startsWith(L)&&/^\d{1,2}$/.test(g.numero.slice(1))&&new Date(T(g.debut_reel||g.debut_prevu)).getFullYear()===y).map(g=>+g.numero.slice(1));
+  let n=Math.max(0,...used)+1;if(n>99){n=1;while(used.includes(n)&&n<=99)n++;if(n>99)return''}return L+String(n).padStart(2,'0')};
+const refInit=fm=>{let touched=false;const e=fm.elements,auto=()=>{if(!touched)e.numero.value=refNext(e.type.value,toI(e.debut_prevu.value))};
+  e.numero.addEventListener('input',()=>{touched=true});['type','debut_prevu'].forEach(k=>e[k].addEventListener('change',auto))};
 const PAL=['#e07b00','#8a3ffc','#c2185b','#00838f'];
 const tc=t=>{const x=C?.types.find(z=>z.nom===t);if(x)return x.couleur;const l=(t||'').toLowerCase();return/d[ée]tenu/.test(l)?'#1f6fd6':/patient/.test(l)?'#2e9e4f':PAL[[...l].reduce((a,c)=>a+c.charCodeAt(0),0)%PAL.length]};
 const TN=()=>C.types.map(t=>t.nom),hor=t=>{const x=C?.services.find(z=>z.nom===t);return x&&x.debut&&x.fin?[x.debut,x.fin]:[]},sc=t=>C?.services.find(z=>z.nom===t)?.couleur||'#6b7a90';
@@ -98,6 +147,7 @@ const rank=t=>{const i=(C?.services||[]).findIndex(z=>z.nom===t);return i<0?99:i
 const hrs=(t,a,b)=>{const h=hor(t);a=a||h[0];b=b||h[1];if(!a||!b)throw new Error('Heures de début et de fin requises pour ce service.');return[a,b]};
 const mk=(dy,a,b)=>{const s=new Date(dy+'T'+a),e=new Date(dy+'T'+(b==='24:00'?'00:00':b));if(b==='24:00'||e<=s)e.setDate(e.getDate()+1);return[s.toISOString(),e.toISOString()]};
 const dot=t=>`<i class="dot" style="background:${tc(t)}"></i>`;
+const oid=g=>g.numero||('#'+g.id.slice(-6));
 const ref=g=>S.role==='Consultation'?g.numero:(g.personne||g.numero);
 /* La durée de la garde découle de ses services */
 function recalc(g){const A=g.services.flatMap(s=>s.aff);if(!A.length)return;const I=x=>new Date(x).toISOString();
@@ -178,7 +228,7 @@ async function pollOnce(q){let ch=await loadWindow();
   for(const e of Object.values(MO)){const t=await(await e.h.getFile()).text();if(t!==e.t){const d=JSON.parse(t);validate(d);e.t=t;e.data=d;ch=true}}
   if(ch){rebuild();if(!$('dlg').open)render();if(!q)setSt('Données mises à jour (autre poste)','o')}sync()}
 const note=()=>{const ms=Object.keys(MO).filter(k=>k!=='@cfg').map(k=>k.split('/')[1]).sort();return`<p class="m">Mois chargés : ${ms.length?ms[0]+' → '+ms[ms.length-1]:'aucun'}${S.all?' (tout)':' · <button class="s" data-a="loadAll">Tout charger</button>'}</p>`};
-const dupChk=(num,id)=>{if(D.gardes.some(g=>g.id!==id&&g.numero.toLowerCase()===num.toLowerCase())&&!confirm('Une garde avec l’ID « '+num+' » existe déjà. Continuer ?'))throw new Error('Enregistrement annulé.')};
+const dupChk=(num,id)=>{if(num&&D.gardes.some(g=>g.id!==id&&g.numero.toLowerCase()===num.toLowerCase())&&!confirm('Une garde avec l’ID « '+num+' » existe déjà. Continuer ?'))throw new Error('Enregistrement annulé.')};
 
 /* ===== Comptes administrateur (admin.json, mots de passe hachés PBKDF2) ===== */
 const hx=async(pw,salt)=>{if(!crypto.subtle)throw new Error('Hachage indisponible dans ce contexte.');const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveBits']);
@@ -212,11 +262,11 @@ async function openDir(d){
   setSt('Connecté','o');sync();render();
 }
 const seed=()=>({schema_version:1,rev:0,
-  types:[{nom:'Garde détenu',couleur:'#1f6fd6',dossier:'garde-detenu'},{nom:'Garde patient',couleur:'#2e9e4f',dossier:'garde-patient'}],
+  pool:[],types:[{nom:'Garde détenu',couleur:'#1f6fd6',dossier:'garde-detenu'},{nom:'Garde patient',couleur:'#2e9e4f',dossier:'garde-patient'}],
   services:[{nom:'Matin',couleur:'#d99a00',debut:'07:45',fin:'16:00'},{nom:'Après-midi',couleur:'#d9622b',debut:'15:45',fin:'24:00'},{nom:'Nuit',couleur:'#4a4fa3',debut:'23:45',fin:'08:00'}],audit:[]});
 
 /* ===== Formulaires ===== */
-function form(title,fs,ok){
+function form(title,fs,ok,init){
   const d=$('dlg');
   d.innerHTML=`<form><h3>${title}</h3>${fs.map(f=>{if(f.t==='checkbox')return`<label><input type="checkbox" name="${f.k}" value="1"${f.v?' checked':''}> ${f.l}</label>`;const n=`name="${f.k}"${f.r?' required':''}`;
     const c=f.o?`<select ${n}>${f.o.map(o=>{const[v,l]=Array.isArray(o)?o:[o,o];return`<option value="${esc(v)}"${v===f.v?' selected':''}>${esc(l)}</option>`}).join('')}</select>`
@@ -224,27 +274,28 @@ function form(title,fs,ok){
     return`<label>${f.l}${f.r?' *':''}${c}</label>`}).join('')}<p id="ferr" role="alert" class="er"></p><p><button>Enregistrer</button> <button type="button" class="s" data-a="close">Annuler</button></p></form>`;
   const fm=d.querySelector('form');
   fm.onsubmit=async e=>{e.preventDefault();$('ferr').textContent='';try{const v=Object.fromEntries(new FormData(fm));fs.forEach(x=>{if(x.t==='checkbox')v[x.k]=v[x.k]?'1':''});await ok(v);d.close()}catch(x){$('ferr').textContent=x.message}};
-  d.showModal();
+  d.showModal();if(init)init(fm);
 }
 const DT=(k,l,v,r)=>({k,l,t:'datetime-local',v:toL(v),r});
 function apply(o,f,ks,d){const ch=[];for(const k of ks){if(!(k in f))continue;
-    if(k==='agent'){const old=o.agent||'',n=f[k].trim();if(old!==n){ch.push('agent : '+(old||'∅')+' → '+n);o.agent=n}continue}
+    if(k==='agent'){const r=resolveAg(f[k]),old=o.agent||'';if(old!==r.agent||(o.mat||'')!==r.mat){ch.push('agent : '+(old||'∅')+' → '+r.agent);o.agent=r.agent;o.mat=r.mat}continue}
     if(k==='piquet'){const n=f[k]==='1',old=isPq(o);if(old!==n){ch.push('piquet : '+(old?'oui':'non')+' → '+(n?'oui':'non'));o.piquet=n;delete o.mode}continue}
     const dt=/debut|fin/.test(k),old=dt?toL(o[k]):(o[k]||'');if(old!==f[k]){ch.push(k+' : '+(old||'∅')+' → '+(f[k]||'∅'));o[k]=dt?toI(f[k]):f[k]}}return ch.join(' ; ')}
 const chkT=(a,b)=>{if(!(T(b)>T(a)))throw new Error('La fin doit être postérieure au début.')};
 const KG=['numero','type','localisation','personne','provenance','tel_service','radio_service','risques','debut_prevu','fin_prevue','debut_reel','fin_reel'],KS=['type','debut','fin','debut_reel','fin_reel','commentaire'],KA=['agent','piquet','debut','fin','debut_reel','fin_reel'];
-const gf=g=>{const ha=(g.services||[]).some(s=>s.aff.length);return[{k:'numero',l:'ID de la garde (ex. A12)',r:1,v:g.numero},{k:'personne',l:'Personne gardée (référence)',r:1,v:g.personne},{k:'type',l:'Type de garde',o:TN(),v:g.type},{k:'localisation',l:'Localisation',v:g.localisation},
+const gf=g=>{const ha=(g.services||[]).some(s=>s.aff.length);return[{k:'numero',l:'ID (lettre = type + mois, puis 01 à 99 : proposé automatiquement ; à laisser vide pour un transfert)',v:g.numero},{k:'personne',l:'Personne gardée (référence)',r:1,v:g.personne},{k:'type',l:'Type de garde',o:TN(),v:g.type},{k:'localisation',l:'Localisation',v:g.localisation},
   {k:'provenance',l:'Provenance (prison, pour un détenu)',v:g.provenance},{k:'tel_service',l:'Téléphone de service',v:g.tel_service},{k:'radio_service',l:'Radio de service',v:g.radio_service},{k:'risques',l:'Risques',t:'area',v:g.risques},
   DT('debut_prevu','Début de la garde',g.debut_prevu,1),...(ha?[]:[DT('fin_prevue','Fin prévue (facultatif)',g.fin_prevue)]),...(g.id&&!ha&&g.statut!=='en_cours'?[DT('fin_reel','Fin réelle',g.fin_reel)]:[])]};
 const sf=s=>[{k:'type',l:'Type de service',o:D.params.services,v:s.type},DT('debut','Début prévu',s.debut,1),DT('fin','Fin prévue',s.fin,1),DT('debut_reel','Début réel',s.debut_reel),DT('fin_reel','Fin réelle',s.fin_reel),{k:'commentaire',l:'Commentaire',v:s.commentaire}];
 const af=(a,s)=>[{k:'agent',l:a.id?'Nom de l’agent':'Nom(s) des agents (séparés par une virgule)',r:1,v:a.id?AN(a.agent):''},{k:'piquet',l:'Droit à la rémunération de piquet (agent arrivé sur la surveillance en moins de 3 h)',t:'checkbox',v:isPq(a)},
   DT('debut','Début prévu',a.debut||s.debut,1),DT('fin','Fin prévue',a.fin||s.fin,1),DT('debut_reel','Début réel',a.debut_reel),DT('fin_reel','Fin réelle',a.fin_reel)];
 function warns(d,a){const w=[],x=T(a.debut),y=T(a.fin);
-  d.gardes.forEach(h=>h.services.forEach(t=>t.aff.forEach(b=>{if(b.id!==a.id&&(b.agent||'').toLowerCase()===a.nom.toLowerCase()&&T(b.debut)<y&&T(b.fin)>x)w.push('chevauchement avec '+h.numero+' ('+t.type+')')})));
+  d.gardes.forEach(h=>h.services.forEach(t=>t.aff.forEach(b=>{if(b.id!==a.id&&((b.mat&&a.mat)?b.mat===a.mat:(b.agent||'').toLowerCase()===a.nom.toLowerCase())&&T(b.debut)<y&&T(b.fin)>x)w.push('chevauchement avec '+h.numero+' ('+t.type+')')})));
   return w}
-function chkA(f,s,id,nom){chkT(f.debut,f.fin);const w=warns(D,{id,nom,debut:toI(f.debut),fin:toI(f.fin)});
-  if(w.length&&!confirm('Attention ('+nom+') : '+w.join(' ; ')+'.\nEnregistrer quand même ?'))throw new Error('Enregistrement annulé.')}
-
+function chkA(f,s,id,nom){chkT(f.debut,f.fin);const r=resolveAg(nom),w=warns(D,{id,nom:r.agent,mat:r.mat,debut:toI(f.debut),fin:toI(f.fin)});
+  if(r.p&&r.p.actif===false)w.push('agent inactif dans le pool');
+  if(r.mat)ltrCheck([{mat:r.mat,nom:r.agent,type:s?s.type:'',s:T(toI(f.debut)),e:T(toI(f.fin))}],id).forEach(x=>w.push('LTR — '+x));
+  if(w.length&&!confirm('Alerte ('+r.agent+') :\n'+w.join('\n')+'\nEnregistrer quand même ?'))throw new Error('Enregistrement annulé.')}
 /* ===== Export PDF (généré sans bibliothèque, A4 paysage) ===== */
 const WIN={'–':0x96,'—':0x97,'’':0x92,'‘':0x91,'“':0x93,'”':0x94,'…':0x85,'œ':0x9c,'Œ':0x8c,'€':0x80,'•':0x95};
 const pe=t=>{let o='';for(const ch of String(t??'')){const c=ch.charCodeAt(0);o+=c<32?' ':c<256?ch:WIN[ch]?String.fromCharCode(WIN[ch]):'?'}return o.replace(/[\\()]/g,m=>'\\'+m)};
@@ -270,9 +321,9 @@ function pdfBytes(g,du,au,reels){
     ops.push(`0.25 w ${M} ${y-RH} m ${W-M} ${y-RH} l S`);y-=RH};
   const head=()=>{if(cur.t){txt(M,y-12,cur.t,10,1);y-=20}pf=true;row(cur.map(c=>c[0]),1)};
   const newPage=()=>{ops=['0.6 G'];pages.push(ops);y=H-M;
-    if(pages.length===1){txt(M,y-14,'Liste des services — '+ref(g),15,1);txt(M,y-32,`ID ${g.numero} · ${g.type} · ${g.localisation||'—'} · Statut : ${LBL[g.statut]}`,10);
+    if(pages.length===1){txt(M,y-14,'Liste des services — '+ref(g),15,1);txt(M,y-32,`ID ${g.numero||'—'} · ${g.type} · ${g.localisation||'—'} · Statut : ${LBL[g.statut]}`,10);
       txt(M,y-47,`Période : du ${fmt(du+'T00:00').slice(0,10)} au ${fmt(au+'T00:00').slice(0,10)} · édité le ${fmt(now)} par ${S.user||'—'}`,10);y-=66}
-    else{txt(M,y-12,ref(g)+' · ID '+g.numero+' — suite',10,1);y-=26}
+    else{txt(M,y-12,ref(g)+' · ID '+(g.numero||'—')+' — suite',10,1);y-=26}
     head()};
   newPage();let last='';
   rows.forEach(z=>{if(y-RH<M+20)newPage();const d=ymd(new Date(T(z.a.debut))),sh=d!==last||pf,sep=d!==last&&last!=='';last=d;pf=false;
@@ -292,17 +343,17 @@ function pdfBytes(g,du,au,reels){
   return Uint8Array.from(out,c=>c.charCodeAt(0));
 }
 function pdfExport(g,du,au,reels){const u=URL.createObjectURL(new Blob([pdfBytes(g,du,au,reels)],{type:'application/pdf'})),a=document.createElement('a');
-  a.href=u;a.download='services_'+slug(g.numero)+'_'+du+'_'+au+'.pdf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),8000)}
+  a.href=u;a.download='services_'+slug(g.numero||ref(g))+'_'+du+'_'+au+'.pdf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),8000)}
 
 /* ===== Actions ===== */
 const cur=()=>G(D,S.sel);
 async function mkG(f,from){const id=uid();
   await commit(async ctx=>{const d=await ctx.file(kOf(f.type,toI(f.debut_prevu)));
-    const g={id,statut:'en_cours',cree_le:new Date().toISOString(),v:1,services:[],fin_prevue:'',fin_reel:'',liens:[]};
+    const g={id,numero:'',statut:'en_cours',cree_le:new Date().toISOString(),v:1,services:[],fin_prevue:'',fin_reel:'',liens:[]};
     apply(g,f,KG);g.debut_reel=g.debut_prevu;d.gardes.push(g);let det='';
     if(from){const src=D.gardes.find(z=>z.id===from),sx=G(await ctx.file(src._k),from);if(!sx)throw new Error('Garde d’origine introuvable.');
       sx.liens=[...(sx.liens||[]),{id,numero:g.numero}];sx.v++;g.liens=[{id:from,numero:sx.numero}];det='suite de '+sx.numero}
-    return{action:'Création garde',objet:g.numero,details:det}});
+    return{action:'Création garde',objet:oid(g),details:det}});
   S.sel=id;render()}
 function LK(g,ed){const tk=z=>z.x?T(z.x.debut_reel||z.x.debut_prevu):0,del=id=>ed?` <button class="x" data-a="delier" data-id="${id}" aria-label="Supprimer le lien">✕</button>`:'';
   const l=(g.liens||[]).map(k=>({k,x:D.gardes.find(z=>z.id===k.id)})).sort((a,b)=>tk(a)-tk(b)),me=T(g.debut_reel||g.debut_prevu);
@@ -310,7 +361,7 @@ function LK(g,ed){const tk=z=>z.x?T(z.x.debut_reel||z.x.debut_prevu):0,del=id=>e
 const H={
   go:t=>{S.view=t.v;render()},close:()=>$('dlg').close(),
   selG:t=>{S.sel=t.id;if(!S.pan){S.pan=true;ls('gpan','1')}render()},
-  tgP:t=>{const g=cur();return upd(g.id,g.v,x=>{const a=x.services.find(z=>z.id===t.s).aff.find(z=>z.id===t.i),n=!isPq(a);a.piquet=n;delete a.mode;return{action:'Piquet',objet:x.numero,details:a.agent+' : '+(n?'droit au piquet':'sans piquet')}}).catch(e=>{render();throw e})},
+  tgP:t=>{const g=cur();return upd(g.id,g.v,x=>{const a=x.services.find(z=>z.id===t.s).aff.find(z=>z.id===t.i),n=!isPq(a);a.piquet=n;delete a.mode;return{action:'Piquet',objet:oid(x),details:a.agent+' : '+(n?'droit au piquet':'sans piquet')}}).catch(e=>{render();throw e})},
   pan:()=>{S.pan=!S.pan;ls('gpan',S.pan?'1':'0');render()},
   togG:t=>{S.sel=t.id;S.open.has(t.id)?S.open.delete(t.id):S.open.add(t.id);render()},
   sort:t=>{S.sort={k:t.k,d:S.sort.k===t.k?-S.sort.d:1};render()},
@@ -318,54 +369,68 @@ const H={
   resume:async()=>{const h=await idbGet('dir');if(!h)throw new Error('Aucun dossier mémorisé.');
     if(await h.queryPermission({mode:'readwrite'})!=='granted'&&await h.requestPermission({mode:'readwrite'})!=='granted')throw new Error('Permission refusée.');await openDir(h)},
   today:()=>{S.day=ymd(new Date());render()},
-  newG:()=>{const n=new Date();n.setSeconds(0,0);form('Nouvelle garde',gf({debut_prevu:n.toISOString(),type:TN()[0]}),async f=>{f.numero=f.numero.trim();dupChk(f.numero,'');await mkG(f,null)})},
-  suite:()=>{const g=cur(),pre={personne:g.personne,type:g.type,provenance:g.provenance,risques:g.risques,debut_prevu:g.fin_reel||g.fin_prevue||new Date().toISOString()};
-    form('Créer la suite de '+esc(g.numero),gf(pre),async f=>{f.numero=f.numero.trim();dupChk(f.numero,'');await mkG(f,g.id)})},
+  newG:()=>{const n=new Date();n.setSeconds(0,0);const pre={debut_prevu:n.toISOString(),type:TN()[0]};pre.numero=refNext(pre.type,pre.debut_prevu);
+    form('Nouvelle garde',gf(pre),async f=>{f.numero=f.numero.trim();dupChk(f.numero,'');await mkG(f,null)},refInit)},
+  suite:()=>{const g=cur(),pre={personne:g.personne,type:g.type,provenance:g.provenance,risques:g.risques,debut_prevu:g.fin_reel||g.fin_prevue||new Date().toISOString()};pre.numero=refNext(pre.type,pre.debut_prevu);
+    form('Créer la suite de '+esc(g.numero||ref(g)),gf(pre),async f=>{f.numero=f.numero.trim();dupChk(f.numero,'');await mkG(f,g.id)},refInit)},
+  poolAdd:()=>form('Nouvel agent du pool',AGF({}),f=>commit(async ctx=>{const cf=await ctx.cfg();cf.pool=cf.pool||[];const mat=f.mat.trim();if(cf.pool.some(p=>nz(p.mat)===nz(mat)))throw new Error('Ce matricule existe déjà.');
+    cf.pool.push({mat,nom:f.nom.trim(),prenom:f.prenom.trim(),contrat:f.contrat.trim(),actif:f.actif==='1'});return{cfg:1,action:'Pool : ajout',objet:mat,details:f.nom.trim()+' '+f.prenom.trim()}})),
+  poolEdit:t=>{const p=PL().find(x=>x.mat===t.m);form('Modifier l’agent '+esc(p.mat),AGF(p).slice(1),f=>commit(async ctx=>{const q=(await ctx.cfg()).pool.find(x=>x.mat===t.m);
+    q.nom=f.nom.trim();q.prenom=f.prenom.trim();q.contrat=f.contrat.trim();q.actif=f.actif==='1';return{cfg:1,action:'Pool : modification',objet:q.mat,details:q.nom+' '+q.prenom+(q.actif?'':' (inactif)')}}))},
+  poolTog:t=>commit(async ctx=>{const q=(await ctx.cfg()).pool.find(x=>x.mat===t.m);q.actif=q.actif===false;return{cfg:1,action:q.actif?'Pool : activation':'Pool : désactivation',objet:q.mat,details:q.nom+' '+q.prenom}}),
+  poolImp:()=>form('Importer des agents (un par ligne)',[{k:'t',l:'Colonnes : matricule ; nom ; prénom ; contrat (séparées par ; ou tabulation). Une ligne d’en-tête est ignorée.',t:'area',r:1,v:''}],f=>commit(async ctx=>{
+    const cf=await ctx.cfg();cf.pool=cf.pool||[];let n=0,sk=0;
+    f.t.split(/\r?\n/).forEach(ln=>{const c=ln.split(/[;\t]/).map(x=>x.trim());if(c.length<3||!c[0]||!c[1]||!c[2]||/^matricule/i.test(c[0])||cf.pool.some(p=>nz(p.mat)===nz(c[0]))){if(ln.trim())sk++;return}
+      cf.pool.push({mat:c[0],nom:c[1],prenom:c[2],contrat:c[3]||'',actif:true});n++});
+    if(!n)throw new Error('Aucune ligne valide (matricule ; nom ; prénom ; contrat).');return{cfg:1,action:'Pool : import',objet:'agents',details:n+' ajoutés, '+sk+' ignorés'}})),
   lier:()=>{const g=cur(),v0=g.v;form('Lier à une autre surveillance',[{k:'ref',l:'ID de la garde à lier (ou nom de la personne)',r:1,v:''}],async f=>{
-    const t=f.ref.trim().toLowerCase(),c=D.gardes.filter(z=>z.id!==g.id&&(z.numero.toLowerCase()===t||(z.personne||'').toLowerCase()===t||(z.numero+' '+(z.personne||'')).toLowerCase()===t));
+    const t=f.ref.trim().toLowerCase(),c=D.gardes.filter(z=>z.id!==g.id&&((z.numero||'').toLowerCase()===t||(z.personne||'').toLowerCase()===t||((z.numero||'')+' '+(z.personne||'')).toLowerCase()===t));
     if(!c.length)throw new Error('Aucune garde chargée avec cet ID. Si elle est ancienne, utilisez « Tout charger ».');
     if(c.length>1)throw new Error('Plusieurs gardes correspondent : '+c.map(z=>z.numero+' ('+fmt(z.debut_prevu).slice(0,10)+')').join(', ')+'. Saisissez l’ID exact.');
     const o=c[0];if((g.liens||[]).some(k=>k.id===o.id))throw new Error('Ces deux gardes sont déjà liées.');
     await commit(async ctx=>{const a=G(await ctx.file(g._k),g.id),b=G(await ctx.file(o._k),o.id);if(!a||!b)throw new Error('Garde introuvable.');if(a.v!==v0)throw conflit();
       a.liens=[...(a.liens||[]),{id:b.id,numero:b.numero}];b.liens=[...(b.liens||[]),{id:a.id,numero:a.numero}];a.v++;b.v++;
-      return{action:'Lien entre gardes',objet:a.numero,details:'lié à '+b.numero}})})},
+      return{action:'Lien entre gardes',objet:oid(a),details:'lié à '+b.numero}})})},
   delier:async t=>{const g=cur();if(!confirm('Supprimer le lien avec cette garde ?'))return;
     await commit(async ctx=>{const a=G(await ctx.file(g._k),g.id);if(!a)throw new Error('Garde introuvable.');a.liens=(a.liens||[]).filter(k=>k.id!==t.id);a.v++;
       const o=D.gardes.find(z=>z.id===t.id);if(o){const b=G(await ctx.file(o._k),o.id);if(b){b.liens=(b.liens||[]).filter(k=>k.id!==g.id);b.v++}}
-      return{action:'Lien supprimé',objet:a.numero,details:o?o.numero:t.id}})},
+      return{action:'Lien supprimé',objet:oid(a),details:o?o.numero:t.id}})},
   rstUi:()=>commit(async ctx=>{const cf=await ctx.cfg();delete cf.affichage;return{cfg:1,action:'Affichage',objet:'valeurs par défaut'}}),
   editG:()=>{const g=cur(),v0=g.v;form('Modifier la garde '+esc(g.numero),gf(g),async f=>{f.numero=f.numero.trim();dupChk(f.numero,g.id);if(f.fin_prevue)chkT(f.debut_prevu,f.fin_prevue);
     await commit(async ctx=>{const k0=g._k,d0=await ctx.file(k0),x=G(d0,g.id);if(!x)throw new Error('Garde introuvable.');if(x.v!==v0)throw conflit();
       const dt=apply(x,f,KG);x.debut_reel=x.debut_prevu;recalc(x);x.v++;const k1=kOf(x.type,x.debut_prevu);
       if(k1!==k0){d0.gardes.splice(d0.gardes.indexOf(x),1);(await ctx.file(k1)).gardes.push(x)}
-      return{action:'Modification garde',objet:x.numero,details:dt+(k1!==k0?' ; déplacée vers '+k1:'')}})})},
-  delG:async()=>{const g=cur();if(!confirm('Supprimer définitivement la garde '+ref(g)+' ('+g.numero+') ?\nLes copies datées antérieures du dossier « sauvegardes » permettent de la retrouver.'))return;
+      return{action:'Modification garde',objet:oid(x),details:dt+(k1!==k0?' ; déplacée vers '+k1:'')}})})},
+  delG:async()=>{const g=cur();if(!confirm('Supprimer définitivement la garde '+ref(g)+(g.numero?' ('+g.numero+')':'')+' ?\nLes copies datées antérieures du dossier « sauvegardes » permettent de la retrouver.'))return;
     await commit(async ctx=>{const d=await ctx.file(g._k),k=d.gardes.findIndex(x=>x.id===g.id);if(k<0)throw new Error('Garde introuvable (déjà supprimée ?).');if(d.gardes[k].v!==g.v)throw conflit();
       const x=d.gardes.splice(k,1)[0];for(const l of x.liens||[]){const o=D.gardes.find(z=>z.id===l.id);if(o){const b=G(await ctx.file(o._k),o.id);if(b){b.liens=(b.liens||[]).filter(q=>q.id!==x.id);b.v++}}}
-      return{action:'Suppression garde',objet:x.numero,details:x.type+' — début '+fmt(x.debut_prevu)}});S.sel=null;S.open.delete(g.id);render()},
+      return{action:'Suppression garde',objet:oid(x),details:x.type+' — début '+fmt(x.debut_prevu)}});S.sel=null;S.open.delete(g.id);render()},
   addA:()=>{const g=cur(),v0=g.v;
-    form('Affecter des agents',[{k:'service',l:'Service',o:C.services.map(z=>z.nom),v:C.services[0]?.nom},{k:'agent',l:'Nom(s) des agents (séparés par une virgule)',r:1,v:''},{k:'piquet',l:'Droit à la rémunération de piquet (agent arrivé sur la surveillance en moins de 3 h)',t:'checkbox',v:false},
+    form('Affecter des agents',[{k:'service',l:'Service',o:C.services.map(z=>z.nom),v:C.services[0]?.nom},{k:'agent',l:'Agents : nom, prénom ou matricule, séparés par une virgule (un agent hors pool peut être saisi librement)',r:1,v:''},
+      {k:'piquet',l:'Droit à la rémunération de piquet (agent arrivé sur la surveillance en moins de 3 h)',t:'checkbox',v:false},
       {k:'du',l:'Du (jour)',t:'date',r:1,v:toL(g.debut_prevu).slice(0,10)},{k:'au',l:'Au (jour, facultatif : plusieurs jours de suite)',t:'date',v:''},
       {k:'h1',l:'Heure de début (vide = horaire du service)',t:'time',v:''},{k:'h2',l:'Heure de fin (vide = horaire du service)',t:'time',v:''}],
     async f=>{const ns=f.agent.split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean);if(!ns.length)throw new Error('Saisissez au moins un nom.');
-      const[a,b]=hrs(f.service,f.h1,f.h2),days=[];for(let d=new Date(f.du+'T00:00'),e=new Date((f.au||f.du)+'T00:00');d<=e&&days.length<62;d.setDate(d.getDate()+1))days.push(ymd(d));
+      const rs=ns.map(resolveAg),[a,b]=hrs(f.service,f.h1,f.h2),days=[];for(let d=new Date(f.du+'T00:00'),e=new Date((f.au||f.du)+'T00:00');d<=e&&days.length<62;d.setDate(d.getDate()+1))days.push(ymd(d));
       if(!days.length)throw new Error('Période invalide.');
-      const list=[];ns.forEach(n=>days.forEach(dy=>{const[s,e]=mk(dy,a,b);list.push({n,s,e})}));
-      const w=[...new Set(list.flatMap(z=>warns(D,{id:'',nom:z.n,debut:z.s,fin:z.e}).map(x=>z.n+' : '+x)))];
-      if(w.length&&!confirm('Attention :\n'+w.slice(0,6).join('\n')+(w.length>6?'\n… (+'+(w.length-6)+')':'')+'\nEnregistrer quand même ?'))throw new Error('Enregistrement annulé.');
+      const list=[];rs.forEach(r=>days.forEach(dy=>{const[s,e]=mk(dy,a,b);list.push({n:r.agent,mat:r.mat,s,e})}));
+      const w=[...new Set(list.flatMap(z=>warns(D,{id:'',nom:z.n,mat:z.mat,debut:z.s,fin:z.e}).map(x=>z.n+' : '+x)))];
+      rs.forEach(r=>{if(r.p&&r.p.actif===false)w.unshift(r.agent+' : agent inactif dans le pool')});
+      const lt=ltrCheck(list.filter(z=>z.mat).map(z=>({mat:z.mat,nom:z.n,type:f.service,s:T(z.s),e:T(z.e)}))),all=[...lt.map(x=>'LTR — '+x),...w];
+      if(all.length&&!confirm('Alerte :\n'+all.slice(0,8).join('\n')+(all.length>8?'\n… (+'+(all.length-8)+')':'')+'\nEnregistrer quand même ?'))throw new Error('Enregistrement annulé.');
       await upd(g.id,v0,(x,d)=>{if(x.statut!=='en_cours')throw new Error('Garde clôturée : plus d’ajout d’agent.');
         let sv=x.services.find(z=>z.type===f.service);if(!sv)x.services.push(sv={id:uid(),type:f.service,aff:[]});
-        list.forEach(z=>sv.aff.push({id:uid(),agent:z.n,piquet:f.piquet==='1',debut:z.s,fin:z.e,debut_reel:'',fin_reel:''}));
-        return{action:'Affectation agents',objet:x.numero,details:f.service+' · '+ns.join(', ')+' · '+days[0]+(days.length>1?' → '+days[days.length-1]:'')}})})},
+        list.forEach(z=>sv.aff.push({id:uid(),agent:z.n,mat:z.mat,piquet:f.piquet==='1',debut:z.s,fin:z.e,debut_reel:'',fin_reel:''}));
+        return{action:'Affectation agents',objet:oid(x),details:f.service+' · '+rs.map(r=>r.agent).join(', ')+' · '+days[0]+(days.length>1?' → '+days[days.length-1]:'')+(all.length?' · '+all.length+' alerte(s) confirmée(s)':'')}})})},
   editA:t=>{const g=cur(),v0=g.v,s=g.services.find(z=>z.id===t.s),a=s.aff.find(z=>z.id===t.i);
     form('Modifier l’affectation',af(a,s),async f=>{chkA(f,s,a.id,f.agent.trim());
-      await upd(g.id,v0,(x,d)=>({action:'Modification affectation',objet:x.numero,details:AN(a.agent)+' — '+apply(x.services.find(z=>z.id===t.s).aff.find(z=>z.id===t.i),f,KA,d)}))})},
+      await upd(g.id,v0,(x,d)=>({action:'Modification affectation',objet:oid(x),details:AN(a.agent)+' — '+apply(x.services.find(z=>z.id===t.s).aff.find(z=>z.id===t.i),f,KA,d)}))})},
   exportG:()=>{const g=cur(),A=g.services.flatMap(s=>s.aff),fin=A.length?ymd(new Date(Math.max(...A.map(a=>T(a.fin)))-6e4)):ymd(new Date());
     form('Exporter les services en PDF',[{k:'du',l:'Du (jour)',t:'date',r:1,v:toL(g.debut_prevu).slice(0,10)},{k:'au',l:'Au (jour)',t:'date',r:1,v:fin},
       {k:'reels',l:'Horaires',o:[['1','Prévus et réels'],['0','Prévus seulement']],v:'1'}],async f=>{
       if(f.au<f.du)throw new Error('Le jour de fin doit être postérieur ou égal au jour de début.');
       pdfExport(g,f.du,f.au,f.reels==='1');
-      try{await commit(async ctx=>{await ctx.file(g._k);return{action:'Export PDF',objet:g.numero,details:'du '+f.du+' au '+f.au}})}
+      try{await commit(async ctx=>{await ctx.file(g._k);return{action:'Export PDF',objet:oid(g),details:'du '+f.du+' au '+f.au}})}
       catch(e){showErr(new Error('PDF créé, mais l’export n’a pas pu être journalisé : '+e.message))}})},
   mvT:t=>commit(async ctx=>{const cf=await ctx.cfg(),i=cf.types.findIndex(x=>x.nom===t.n),j=i+ +t.d;if(i<0||j<0||j>=cf.types.length)throw new Error('Déplacement impossible.');
     [cf.types[i],cf.types[j]]=[cf.types[j],cf.types[i]];return{cfg:1,action:'Ordre des types de garde',objet:t.n,details:'position '+(j+1)}}),
@@ -382,25 +447,24 @@ const H={
     const d=await admRead();if(d.comptes.some(x=>x.id===f.id.trim()))throw new Error('Identifiant déjà utilisé.');pwOk(f);d.comptes.push(await mkAcc(f.id,f.pw));await admWrite(d)}),
   loadAll:async()=>{S.all=true;if(await loadWindow())rebuild();render()},
   delA:async t=>{const g=cur();if(!confirm('Retirer cet agent du service ?'))return;
-    await upd(g.id,g.v,x=>{if(x.statut!=='en_cours')throw new Error('Garde clôturée.');const s=x.services.find(z=>z.id===t.s),k=s.aff.findIndex(z=>z.id===t.i);const a=s.aff.splice(k,1)[0];return{action:'Retrait agent',objet:x.numero,details:AN(a.agent)+' / '+s.type}})},
+    await upd(g.id,g.v,x=>{if(x.statut!=='en_cours')throw new Error('Garde clôturée.');const s=x.services.find(z=>z.id===t.s),k=s.aff.findIndex(z=>z.id===t.i);const a=s.aff.splice(k,1)[0];return{action:'Retrait agent',objet:oid(x),details:AN(a.agent)+' / '+s.type}})},
   clot:async()=>{const g=cur();if(!confirm('Clôturer cette garde ? Elle passera en « Terminée — à traiter » n’acceptera plus d’agent et les affectations futures seront retirées.'))return;
-    await upd(g.id,g.v,x=>{if(x.statut!=='en_cours')throw new Error('Garde déjà clôturée.');x.statut='a_traiter';const n=new Date().toISOString();x.cloture_le=n;x.fin_reel=n;let rm=0;x.services.forEach(s=>{s.aff=s.aff.filter(a=>T(a.debut)>T(n)?(rm++,false):true);s.aff.forEach(a=>{if(!a.fin_reel&&T(a.fin)>T(n))a.fin_reel=n})});return{action:'Clôture opérationnelle',objet:x.numero,details:rm?rm+' affectation(s) future(s) retirée(s)':''}})},
+    await upd(g.id,g.v,x=>{if(x.statut!=='en_cours')throw new Error('Garde déjà clôturée.');x.statut='a_traiter';const n=new Date().toISOString();x.cloture_le=n;x.fin_reel=n;let rm=0;x.services.forEach(s=>{s.aff=s.aff.filter(a=>T(a.debut)>T(n)?(rm++,false):true);s.aff.forEach(a=>{if(!a.fin_reel&&T(a.fin)>T(n))a.fin_reel=n})});return{action:'Clôture opérationnelle',objet:oid(x),details:rm?rm+' affectation(s) future(s) retirée(s)':''}})},
   trait:async()=>{const g=cur();if(!confirm('Valider le traitement administratif de cette garde ?'))return;
     await upd(g.id,g.v,x=>{const p=[];if(!x.personne||!x.type||!x.debut_reel)p.push('champs obligatoires manquants (personne, type, début)');
       else if(x.fin_reel&&!(T(x.fin_reel)>T(x.debut_reel)))p.push('fin réelle antérieure au début');
       x.services.forEach(s=>s.aff.forEach(a=>{if(!(T(a.fin)>T(a.debut)))p.push('affectation de '+AN(a.agent)+' incohérente')}));
       if(p.length)throw new Error('Traitement impossible : '+p.join(' ; ')+'.');
-      x.statut='traitee';x.traite_le=new Date().toISOString();x.traite_par=S.user||'(non renseigné)';return{action:'Traitement administratif',objet:x.numero}})},
+      x.statut='traitee';x.traite_le=new Date().toISOString();x.traite_par=S.user||'(non renseigné)';return{action:'Traitement administratif',objet:oid(x)}})},
   reopen:()=>{const g=cur();form('Rouvrir '+esc(g.numero),[{k:'j',l:'Justification',t:'area',r:1,v:''}],async f=>
-    upd(g.id,g.v,x=>{x.statut='a_traiter';x.traite_le='';return{action:'Réouverture',objet:x.numero,details:f.j}}))},
-  addP:t=>form('Ajouter un élément',[{k:'v',l:'Libellé',r:1,v:''}],f=>commit(d=>{const l=d.params[t.l],v=f.v.trim();if(l.includes(v))throw new Error('Déjà présent.');l.push(v);return{action:'Paramètre',objet:t.l,details:v}})),
-  addAg:()=>form('Nouvel agent',[{k:'v',l:'Nom ou identifiant professionnel',r:1,v:''}],f=>commit(d=>{d.agents.push({id:uid(),nom:f.v.trim(),actif:true});return{action:'Ajout agent',objet:'agents',details:f.v}})),
-  togAg:t=>commit(d=>{const a=d.agents.find(x=>x.id===t.id);a.actif=!a.actif;return{action:a.actif?'Réactivation agent':'Désactivation agent',objet:'agents',details:a.nom}}),
+    upd(g.id,g.v,x=>{x.statut='a_traiter';x.traite_le='';return{action:'Réouverture',objet:oid(x),details:f.j}}))},
 };
 document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(t&&H[t.dataset.a])Promise.resolve().then(()=>H[t.dataset.a](t.dataset)).catch(showErr)});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('tr[data-a],th[data-a],.gr[data-a]'))e.target.click()});
 document.addEventListener('change',async e=>{const t=e.target,c=t.dataset.col;
-  try{if(t.dataset.ui){const k=t.dataset.ui,[lo,hi]=UIR[k],v=Math.min(hi,Math.max(lo,Math.round(+t.value||UID[k])));
+  try{if(t.dataset.ltr){const k=t.dataset.ltr,v=Math.min(99,Math.max(1,Math.round(+t.value||LTRD[k])));
+    await commit(async ctx=>{const cf=await ctx.cfg();cf.ltr={...(cf.ltr||{}),[k]:v};return{cfg:1,action:'Règle LTR',objet:k,details:String(v)}});return}
+    if(t.dataset.ui){const k=t.dataset.ui,[lo,hi]=UIR[k],v=Math.min(hi,Math.max(lo,Math.round(+t.value||UID[k])));
     await commit(async ctx=>{const cf=await ctx.cfg();cf.affichage={...(cf.affichage||{}),[k]:v};return{cfg:1,action:'Affichage',objet:k,details:String(v)}});return}
     if(c){await commit(async ctx=>{const cf=await ctx.cfg(),x=cf[c].find(z=>z.nom===t.dataset.n);x.couleur=t.value;return{cfg:1,action:'Couleur',objet:t.dataset.n,details:t.value}});return}
     const f=t.dataset.f;if(!f)return;const[a,b]=f.split('.');if(b)S[a][b]=t.value;else S[a]=t.value;if(await loadWindow())rebuild();render()}catch(x){showErr(x)}});
@@ -425,7 +489,7 @@ function stats(){
   gs.forEach(g=>{r.types[g.type]=(r.types[g.type]||0)+1;r.st[g.statut]++;
     const s=T(g.debut_reel||g.debut_prevu),e=T(g.fin_reel||g.fin_prevue)||Date.now();r.dur+=h(s,e);
     const k=ymd(new Date(s)).slice(0,S.grp==='jour'?10:S.grp==='mois'?7:4);r.per[k]=(r.per[k]||0)+1;
-    g.services.forEach(v=>{r.sv+=new Set(v.aff.map(x=>ymd(new Date(T(x.debut))))).size;if(v.type==='Pause')return;v.aff.forEach(x=>{const u=x.debut_reel&&x.fin_reel,q=h(T(u?x.debut_reel:x.debut),T(u?x.fin_reel:x.fin));r.ha+=q;r.ag.add((x.agent||'').toLowerCase());if(isPq(x)){r.pq++;r.hp+=q;const o=r.pqt[g.type]||(r.pqt[g.type]={n:0,h:0});o.n++;o.h+=q}})})});
+    g.services.forEach(v=>{r.sv+=new Set(v.aff.map(x=>ymd(new Date(T(x.debut))))).size;if(v.type==='Pause')return;v.aff.forEach(x=>{const u=x.debut_reel&&x.fin_reel,q=h(T(u?x.debut_reel:x.debut),T(u?x.fin_reel:x.fin));r.ha+=q;r.ag.add((x.mat||x.agent||'').toLowerCase());if(isPq(x)){r.pq++;r.hp+=q;const o=r.pqt[g.type]||(r.pqt[g.type]={n:0,h:0});o.n++;o.h+=q}})})});
   return r;
 }
 function svg(ser,n,lab,tk){
@@ -457,14 +521,14 @@ function vCours(){
   const d0=+new Date(S.day+'T00:00'),d1=d0+864e5,pc=x=>(Math.min(Math.max(x,d0),d1)-d0)/864e3,now=Date.now();
   const l=D.gardes.filter(g=>g.statut==='en_cours'&&T(g.debut_reel||g.debut_prevu)<d1&&(T(g.fin_reel||g.fin_prevue)||1/0)>d0).sort((a,b)=>S.gs==='ref'?ref(a).localeCompare(ref(b)):S.gs==='debut'?T(a.debut_reel||a.debut_prevu)-T(b.debut_reel||b.debut_prevu):tIdx(a)-tIdx(b)||T(a.debut_reel||a.debut_prevu)-T(b.debut_reel||b.debut_prevu));
   const bar=(s,e,c,h,ti,st,cl)=>`<div class="gb${cl?' '+cl:''}" style="left:${pc(s)}%;width:${Math.max(pc(e)-pc(s),.6)}%;background:${c};${st||''}" title="${esc(ti)}">${h}</div>`;
-  const toDay=S.day===ymd(new Date());
+  const toDay=S.day===ymd(new Date()),LT=ltrIndex();
   const info=g=>{const A=g.services.flatMap(v=>v.aff),nm=S.role==='Consultation',sb=g.debut_reel||g.debut_prevu;
     const cu=[...new Set(A.filter(a=>T(a.debut)<=now&&T(a.fin)>now).map(a=>a.agent))].join(', ')||'—',nx=A.filter(a=>T(a.debut)>now).sort((p,q)=>T(p.debut)-T(q.debut))[0];
     const nt=nx?[...new Set(A.filter(a=>a.debut===nx.debut).map(a=>a.agent))].join(', ')+' ('+(ymd(new Date(T(nx.debut)))===ymd(new Date())?'':fmt(nx.debut).slice(0,5)+' ')+tm(nx.debut)+')':'—';
     return[[0,g.localisation],['Tél.',g.tel_service],['Radio',g.radio_service],['Début',fmt(sb).slice(0,5)+' '+tm(sb)],['Risques',!nm&&g.risques&&g.risques.replace(/\s+/g,' ')],['Actuel',cu],['Suivant',nt]].filter(x=>x[1])};
   const svRows=g=>{const by={};g.services.forEach(v=>v.aff.filter(a=>T(a.fin)>d0&&T(a.debut)<d1).forEach(a=>(by[v.type]||(by[v.type]=[])).push(a)));
     const ts=[...new Set([...C.services.filter(z=>z.debut&&z.fin).map(z=>z.nom),...Object.keys(by)])].sort((a,b)=>rank(a)-rank(b));
-    return ts.map(t=>{const m={};(by[t]||[]).forEach(a=>{const k=a.debut+'|'+a.fin;(m[k]||(m[k]={a,n:[]})).n.push(a.agent+(isPq(a)?' (piquet)':''))});
+    return ts.map(t=>{const m={};(by[t]||[]).forEach(a=>{const k=a.debut+'|'+a.fin;(m[k]||(m[k]={a,n:[]})).n.push(a.agent+(isPq(a)?' (piquet)':'')+(LT.has(a.id)?' ⚠':''))});
       const it=Object.values(m).sort((p,q)=>T(p.a.debut)-T(q.a.debut)),ln=[];it.forEach(x=>{let k=ln.findIndex(e=>e<=T(x.a.debut));if(k<0)k=ln.length;ln[k]=T(x.a.fin);x.k=k});
       return`<div class="gr sub" style="height:${Math.max(1,ln.length)*(UI().service+4)+4}px"><div class="gl">&nbsp;&nbsp;↳ <i class="dot" style="background:${sc(t)}"></i>${esc(t)}</div><div class="gt">${it.map(x=>{const a=x.a,nm=x.n.join(', '),hh=tm(a.debut)+'–'+tm(a.fin);
         return bar(T(a.debut),T(a.fin),sc(t),(T(a.debut)<d0?'◂ ':'')+esc(nm)+' · '+hh+(T(a.fin)>d1?' ▸':''),t+' · '+nm+' · '+hh,'top:'+(3+x.k*(UI().service+4))+'px')}).join('')||'<span class="m" style="display:block;padding:6px 8px">aucun agent</span>'}</div></div>`}).join('')};
@@ -480,7 +544,7 @@ function vCours(){
 const vTraiter=()=>`<div class="c"><h2>Gardes terminées à traiter</h2>${note()}${tbl(D.gardes.filter(g=>g.statut==='a_traiter'))}</div>`;
 function vHist(){
   const h=S.h,fi=(k,l,t='text')=>`<label>${l} <input type="${t}" data-f="h.${k}" value="${esc(h[k]||'')}"></label>`;
-  const l=D.gardes.filter(g=>(!h.num||(g.numero+(S.role!=='Consultation'?' '+(g.personne||''):'')).toLowerCase().includes(h.num.toLowerCase()))&&(!h.type||g.type===h.type)&&(!h.loc||(g.localisation||'').toLowerCase().includes(h.loc.toLowerCase()))&&(!h.st||g.statut===h.st)
+  const l=D.gardes.filter(g=>(!h.num||((g.numero||'')+(S.role!=='Consultation'?' '+(g.personne||''):'')).toLowerCase().includes(h.num.toLowerCase()))&&(!h.type||g.type===h.type)&&(!h.loc||(g.localisation||'').toLowerCase().includes(h.loc.toLowerCase()))&&(!h.st||g.statut===h.st)
     &&(!h.du||T(g.debut_reel||g.debut_prevu)>=+new Date(h.du+'T00:00'))&&(!h.au||T(g.debut_reel||g.debut_prevu)<+new Date(h.au+'T00:00')+864e5)
     &&(!h.ag||g.services.some(s=>s.aff.some(a=>AN(a.agent).toLowerCase().includes(h.ag.toLowerCase())))));
   return`<div class="c"><h2>Historique</h2>${note()}<div class="fl">${fi('num','Référence ou n°')}<label>Type <select data-f="h.type">${opts(TN(),h.type,'Tous')}</select></label>${fi('loc','Localisation')}
@@ -495,6 +559,8 @@ function vAdmin(){
   return`<div class="c"><h2>Administration</h2><p class="m">Connecté : ${esc(S.admin)}</p>
   <h3>Types de gardes <button class="s" data-a="addT">+ Type</button></h3><table>${C.types.map((t,i)=>`<tr><td>${col('types',t)}</td><td>${esc(t.nom)}</td><td class="m">${esc(t.dossier)}/AAAA-MM.json</td><td><button class="s" data-a="mvT" data-n="${esc(t.nom)}" data-d="-1"${i?'':' disabled'} aria-label="Monter">↑</button> <button class="s" data-a="mvT" data-n="${esc(t.nom)}" data-d="1"${i<C.types.length-1?'':' disabled'} aria-label="Descendre">↓</button></td></tr>`).join('')}</table>
   <h3>Types de services <button class="s" data-a="addSv">+ Service</button></h3><table>${C.services.map(t=>`<tr><td>${col('services',t)}</td><td>${esc(t.nom)}</td><td class="m">${t.debut&&t.fin?t.debut+'–'+t.fin:'horaires à saisir'}</td></tr>`).join('')}</table>
+  ${poolView()}
+  ${ltrForm()}
   ${uiForm()}
   <h3>Comptes</h3><p><button class="s" data-a="chpw">Changer mon mot de passe</button> <button class="s" data-a="addAdm">+ Compte administrateur</button></p></div>
   <div class="c"><h3>Journal d’audit (100 derniers, mois chargés)</h3><table>${[...D.audit].reverse().slice(0,100).map(a=>`<tr><td>${fmt(a.le)}</td><td>${esc(a.user)} (${esc(a.role)})</td><td>${esc(a.action)}</td><td>${esc(a.objet)}</td><td>${esc(a.details)}</td></tr>`).join('')||'<tr><td>Aucun événement.</td></tr>'}</table></div>`;
@@ -504,8 +570,8 @@ function SV(g,ed,c){const l=g.services.filter(s=>s.aff.length).sort((a,b)=>rank(
 function detail(){
   const g=D.gardes.find(x=>x.id===S.sel);if(!g)return'<div class="c m">Sélectionnez une garde pour afficher sa fiche.</div>';
   const ed=canEdit(g),c=g.statut==='en_cours'&&rw(),nm=S.role==='Consultation',row=(a,b)=>`<tr><td class="m">${a}</td><td>${b}</td></tr>`;
-  const w=[];g.services.forEach(s=>s.aff.forEach(a=>{if(!(T(a.fin)>T(a.debut)))w.push(AN(a.agent)+' : horaires incohérents');warns(D,{...a,nom:AN(a.agent)}).forEach(x=>w.push(AN(a.agent)+' : '+x))}));
-  const au=D.audit.filter(a=>a.objet===g.numero).slice(-6).reverse();
+  const w=[],LT=ltrIndex();g.services.forEach(s=>s.aff.forEach(a=>{if(!(T(a.fin)>T(a.debut)))w.push(AN(a.agent)+' : horaires incohérents');warns(D,{...a,nom:AN(a.agent)}).forEach(x=>w.push(AN(a.agent)+' : '+x));(LT.get(a.id)||[]).forEach(m=>w.push(AN(a.agent)+' : LTR — '+m))}));
+  const au=D.audit.filter(a=>a.objet===oid(g)).slice(-6).reverse();
   return`<div class="c"><h2>${esc(ref(g))} <span class="chip ${g.statut}">${LBL[g.statut]}</span></h2><table>${row('ID',esc(g.numero))}${row('Type',dot(g.type)+esc(g.type))}${row('Localisation',esc(g.localisation))}${g.provenance?row('Provenance',nm?'(masqué)':esc(g.provenance)):''}${g.tel_service?row('Téléphone de service',esc(g.tel_service)):''}${g.radio_service?row('Radio de service',esc(g.radio_service)):''}${row('Risques',nm?'(masqué)':esc(g.risques))}
   ${row('Début',fmt(g.debut_prevu))}${row('Fin (selon les agents)',fmt(g.fin_reel||g.fin_prevue))}${g.traite_le?row('Traitée',fmt(g.traite_le)+' par '+esc(g.traite_par)):''}</table>
   <p>${ed?'<button data-a="editG">Modifier</button> ':''}${rw()?'<button class="s" data-a="exportG">Exporter en PDF</button> ':''}${c?'<button data-a="clot">Clôturer</button> ':''}${g.statut==='a_traiter'&&rw()?'<button data-a="trait">Marquer traitée</button> ':''}${g.statut==='traitee'&&adm()?'<button class="x" data-a="reopen">Rouvrir</button>':''}${ed?' <button class="x" data-a="delG">Supprimer</button>':''}</p>
