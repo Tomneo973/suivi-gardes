@@ -15,15 +15,16 @@ Les données sont des fichiers JSON dans un dossier partagé du réseau (2 utili
 
 - `suivi-gardes.html` : l'application complète (HTML, CSS, JavaScript, sans dépendance).
 - `outils/prototype-phase1.html` : page de test de l'accès au dossier réseau, des conflits et du verrou d'écriture (à passer sur les deux postes avant la mise en production).
-- `docs/` : documentation (exporter le document « Suivi des gardes — Documentation » en Markdown vers `docs/DOCUMENTATION.md`).
+- `docs/DOCUMENTATION.md` : documentation complète (utilisation, administration, fichiers, sauvegardes, dépannage, partie technique, validation).
 
 ## Données : à ne jamais publier
 
-Le dépôt contient uniquement le code. Les fichiers de données (`config.json`, `admin.json`, dossiers par type de garde, `sauvegardes/`) contiennent des informations sensibles et sont exclus par `.gitignore`. Ne choisissez jamais le dossier du dépôt comme dossier de données, et gardez ce dépôt **privé**.
+Le dépôt contient uniquement le code. Les fichiers de données (`config.json`, `admin.json`, dossiers `AAAA/Type/Mois`, `sauvegardes/`) contiennent des informations sensibles et sont exclus par `.gitignore`. Ne choisissez jamais le dossier du dépôt comme dossier de données, et gardez ce dépôt **privé**.
 
 ## Fonctions principales
 
 - Gardes en cours sur une timeline 00:00–24:00 (quadrillage 15 min), services Matin / Après-midi / Nuit, agents par service, piquet.
 - Gardes à traiter, historique, tableau de bord avec courbes de gardes simultanées.
 - Export PDF paysage des services d'une garde sur une période, avec total des heures prestées.
-- Un fichier JSON par type de garde et par mois, copies datées, détection des conflits, journal d'audit.
+- Une surveillance = un fichier JSON, rangé dans `AAAA/Type/Mois/` et nommé `AAAA_Axx_Nom_Statut.json` (Actif, Fini, Traite). Copies datées, détection des conflits, journal d'audit.
+- Pool d'agents, contrôle LTR, référence semi-automatique, liens entre surveillances.

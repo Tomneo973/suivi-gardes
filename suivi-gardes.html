@@ -101,18 +101,31 @@ function resolveAg(txt){const t=nz(txt),pl=PL();if(!t)return{agent:'',mat:''};
   if(m.length>1)throw new Error('Plusieurs agents du pool correspondent à « '+String(txt).trim()+' » : '+m.map(p=>pcan(p)+' ('+p.mat+')').join(', ')+'. Précisez avec le prénom ou le matricule.');
   return m.length?{agent:pcan(m[0]),mat:m[0].mat,p:m[0]}:{agent:String(txt).trim(),mat:''}}
 /* LTR : règles modifiables dans l'administration */
-const LTRD={jours:6,repos:10,nuit:11,jour:13},LTRC=()=>({...LTRD,...(C?.ltr||{})}),isNightSv=t=>/nuit/i.test(t||'');
+const LTRD={jours:6,repos:10,sem:35,jour:13,pjour:14,nuit:11,pnuit:13},LTRC=()=>({...LTRD,...(C?.ltr||{})}),isNightSv=t=>/nuit/i.test(t||'');
 function shiftsAll(){const m=new Map();D.gardes.forEach(g=>g.services.forEach(v=>{if(v.type==='Pause')return;v.aff.forEach(a=>{if(!a.mat)return;const r=a.debut_reel&&a.fin_reel,s=T(r?a.debut_reel:a.debut),e=T(r?a.fin_reel:a.fin);if(isNaN(s)||isNaN(e))return;
   if(!m.has(a.mat))m.set(a.mat,[]);m.get(a.mat).push({id:a.id,mat:a.mat,nom:a.agent,type:v.type,s,e})})}));return m}
-function ltrOf(list){const R=LTRC(),out=new Map(),add=(s,m)=>{if(!out.has(s.id))out.set(s.id,[]);out.get(s.id).push(m)};
-  list.sort((a,b)=>a.s-b.s);let me=-1/0;
-  list.forEach((s,i)=>{const h=(s.e-s.s)/36e5,nt=isNightSv(s.type),lim=nt?R.nuit:R.jour;
-    if(h>lim)add(s,'service de '+dh(h*60)+' (maximum '+lim+' h '+(nt?'de nuit':'de jour')+')');
-    if(i){const gap=(s.s-me)/36e5;if(gap<R.repos)add(s,'repos de '+dh(Math.max(0,gap)*60)+' avant ce service (minimum '+R.repos+' h)')}
-    me=Math.max(me,s.e)});
-  const ds=[...new Set(list.map(s=>ymd(new Date(s.s))))].sort();let run=[];
-  const flush=()=>{run.forEach((d,k)=>{if(k>=R.jours)list.filter(s=>ymd(new Date(s.s))===d).forEach(s=>add(s,'jour '+(k+1)+' consécutif (maximum '+R.jours+')'))});run=[]};
-  ds.forEach(d=>{if(run.length&&Math.round((+new Date(d+'T12:00')-+new Date(run[run.length-1]+'T12:00'))/864e5)!==1)flush();run.push(d)});flush();return out}
+function ltrOf(list){const R=LTRC(),out=new Map(),H=36e5,add=(s,m)=>{if(!out.has(s.id))out.set(s.id,[]);if(!out.get(s.id).includes(m))out.get(s.id).push(m)},dk=t=>ymd(new Date(t));
+  list.sort((a,b)=>a.s-b.s);
+  const gapD=(a,b)=>Math.round((+new Date(b+'T12:00')-+new Date(a+'T12:00'))/864e5);
+  /* 1. jours consécutifs (jour = date de début du service) */
+  const ds=[...new Set(list.map(s=>dk(s.s)))].sort(),runLen={};
+  ds.forEach((d,i)=>{const p=ds[i-1];runLen[d]=p&&gapD(p,d)===1?runLen[p]+1:1});
+  ds.forEach(d=>{if(runLen[d]>R.jours)list.filter(s=>dk(s.s)===d).forEach(s=>add(s,'jour '+runLen[d]+' consécutif (maximum '+R.jours+')'))});
+  /* 2. repos entre deux services ; repos prolongé après la série maximale de jours consécutifs */
+  let me=-1/0,md='';
+  list.forEach((s,i)=>{const d=dk(s.s);
+    if(i){const gap=(s.s-me)/H;
+      if(d!==md&&runLen[md]>=R.jours&&gapD(md,d)!==1){if(gap<R.sem)add(s,'repos de '+dh(Math.max(0,gap)*60)+' après '+R.jours+' jours consécutifs (minimum '+R.sem+' h)')}
+      else if(gap<R.repos)add(s,'repos de '+dh(Math.max(0,gap)*60)+' avant ce service (minimum '+R.repos+' h)')}
+    if(s.e>me){me=s.e;md=dk(s.s)}});
+  /* 3. travail dans une plage : jour (06:00-23:00) = max 13 h sur 14 h ; plage touchant la nuit (23:00-06:00) = max 11 h sur 13 h */
+  const mg=[];list.forEach(s=>{const l=mg[mg.length-1];if(l&&s.s<=l[1])l[1]=Math.max(l[1],s.e);else mg.push([s.s,s.e])});
+  const wk=(a,b)=>mg.reduce((n,[x,y])=>n+Math.max(0,Math.min(y,b)-Math.max(x,a)),0)/H;
+  const night=(a,b)=>{for(let d=new Date(dk(a-864e5)+'T00:00');+d<b;d.setDate(d.getDate()+1)){const n0=+new Date(d.getFullYear(),d.getMonth(),d.getDate(),23),n1=+new Date(d.getFullYear(),d.getMonth(),d.getDate()+1,6);if(Math.min(b,n1)>Math.max(a,n0))return true}return false};
+  list.forEach(s=>{let best=null;
+    [0,1].forEach(k=>[[R.pnuit,R.nuit,true],[R.pjour,R.jour,false]].forEach(([W,L,nt])=>{const a=k?s.e-W*H:s.s,b=k?s.e:s.s+W*H;if(night(a,b)!==nt)return;const w=wk(a,b);if(w>L&&(!best||w-L>best.x))best={w,W,L,nt,x:w-L}}));
+    if(best)add(s,dh(best.w*60)+' de travail sur '+best.W+' h consécutives (maximum '+best.L+' h '+(best.nt?'sur une plage touchant la nuit':'sur une plage de jour')+')')});
+  return out}
 function ltrIndex(){const out=new Map();shiftsAll().forEach(l=>ltrOf(l.map(x=>({...x}))).forEach((ms,id)=>out.set(id,ms)));return out}
 /* Nouvelles infractions provoquées par l'entrée de ces services (agents du pool uniquement) */
 function ltrCheck(cands,excl){const all=shiftsAll(),res=[];
@@ -131,7 +144,7 @@ function poolView(){const st=agStats(),q=nz(S.pf||''),pl=[...PL()].sort((a,b)=>n
     return`<tr${p.actif===false?' class="m"':''}><td>${esc(p.mat)}</td><td>${esc(p.nom)}</td><td>${esc(p.prenom)}</td><td>${esc(p.contrat)}</td><td>${p.actif===false?'inactif':'actif'}</td><td>${o.n}</td><td>${Math.round(o.h*10)/10} h</td><td>${o.pq}</td><td>${o.lt||''}</td><td><button class="s" data-a="poolEdit" data-m="${esc(p.mat)}" aria-label="Modifier">✎</button> <button class="s" data-a="poolTog" data-m="${esc(p.mat)}">${p.actif===false?'Activer':'Désactiver'}</button></td></tr>`}).join('')||'<tr><td>Aucun agent. Ajoutez-en ou importez une liste.</td></tr>'}</table>
   <p class="m">Suivi calculé sur les mois chargés. Un agent hors pool reste saisissable librement, sans suivi ni contrôle LTR. Renommer un agent ne modifie pas les plannings déjà saisis.</p>`}
 function ltrForm(){const r=LTRC(),f=(k,l)=>`<label>${l} <input type="number" style="width:64px" data-ltr="${k}" min="1" max="99" value="${r[k]}"></label>`;
-  return`<h3>Contrôle LTR (agents du pool)</h3><div class="fl">${f('jours','Jours consécutifs max')}${f('repos','Repos minimum entre 2 services (h)')}${f('nuit','Durée max d’un service de nuit (h)')}${f('jour','Durée max d’un service de jour (h)')}</div><p class="m">Une alerte s’affiche quand un agent du pool enfreint une règle à son entrée en planification ; les infractions restent signalées par ⚠ dans le Gantt et dans la fiche. Le service de nuit est celui nommé « Nuit ».</p>`}
+  return`<h3>Contrôle LTR (agents du pool)</h3><div class="fl">${f('jours','Jours consécutifs maximum')}${f('repos','Repos minimum entre 2 services (h)')}${f('sem','Repos après les jours consécutifs maximum (h)')}${f('jour','Travail maximum sur une plage de jour (h)')}${f('pjour','Plage de jour (h)')}${f('nuit','Travail maximum sur une plage touchant la nuit (h)')}${f('pnuit','Plage de nuit (h)')}</div><p class="m">Jour = 06:00–23:00, nuit = 23:00–06:00. Une plage qui touche la nuit suit les règles de nuit. Une alerte s’affiche quand un agent du pool enfreint une règle à son entrée en planification ; les infractions restent signalées par ⚠ dans le Gantt et dans la fiche.</p>`}
 /* Référence semi-automatique : lettre = mois × type (A patient janvier, B détenu janvier, C patient février…), puis 01 à 99 */
 const refKind=t=>/d[ée]tenu/i.test(t||'')?1:/patient/i.test(t||'')?0:-1;
 const refLetter=(t,iso)=>{const k=refKind(t),d=new Date(T(iso));return k<0||isNaN(d)?'':String.fromCharCode(65+d.getMonth()*2+k)};
@@ -154,11 +167,19 @@ function recalc(g){const A=g.services.flatMap(s=>s.aff);if(!A.length)return;cons
   g.fin_prevue=I(Math.max(...A.map(a=>T(a.fin))));if(g.statut!=='en_cours')g.fin_reel=I(Math.max(...A.map(a=>T(a.fin_reel||a.fin))))}
 
 /* ===== Accès aux fichiers (module isolé) =====
-   config.json (types, services, couleurs) · <type>/AAAA-MM.json (gardes d'un type pour un mois) · admin.json (comptes) · sauvegardes/ */
+   config.json (types, services, couleurs, pool, règles) · AAAA/Type/Mois/AAAA_Axx_Nom_Statut.json (une surveillance par fichier) · admin.json (comptes) · sauvegardes/ */
 const FILE='config.json',LOCK='gardes.verrou',BK='sauvegardes';
 const wr=async(t,h)=>{const w=await h.createWritable();await w.write(t);await w.close()};
 const slug=n=>n.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'type';
-const kOf=(ty,iso)=>(C.types.find(t=>t.nom===ty)?.dossier||slug(ty))+'/'+ymd(new Date(T(iso))).slice(0,7);
+const MONTHS=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'],STAT_F={en_cours:'Actif',a_traiter:'Fini',traitee:'Traite'};
+const capSlug=n=>{const x=slug(String(n).replace(/^garde\s+/i,''));return x.charAt(0).toUpperCase()+x.slice(1)};
+const typeDir=ty=>{const d=C.types.find(t=>t.nom===ty)?.dossier||capSlug(ty);return/^garde-/.test(d)?capSlug(d.slice(6)):d};
+const fnPart=s=>String(s??'').normalize('NFC').replace(/[\\\/:*?"<>|\u0000-\u001f]/g,'').trim().replace(/\s+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);
+/* Emplacement d'une surveillance : [année, type, mois, nom de fichier] ; elle reste dans le mois où elle a commencé */
+function gPath(g){const d=new Date(T(g.debut_prevu)),y=d.getFullYear();return[String(y),typeDir(g.type),MONTHS[d.getMonth()],[y,fnPart(g.numero),fnPart(g.personne)||'Sans-nom',STAT_F[g.statut]||'Actif'].filter(x=>x!=='').join('_')]}
+async function dirAt(fp,create){let h=dir;for(const n of fp)h=await h.getDirectoryHandle(n,{create:!!create});return h}
+async function fileAtKey(key){const p=key.split('/'),n=p.pop();return(await dirAt(p)).getFileHandle(n)}
+async function rmKey(key){const p=key.split('/'),n=p.pop();try{await(await dirAt(p)).removeEntry(n)}catch(e){}}
 const idb=()=>new Promise((s,j)=>{const r=indexedDB.open('suivi-gardes',1);r.onupgradeneeded=()=>r.result.createObjectStore('h');r.onsuccess=()=>s(r.result);r.onerror=()=>j(r.error)});
 const idbGet=async k=>{const db=await idb();return new Promise((s,j)=>{const q=db.transaction('h').objectStore('h').get(k);q.onsuccess=()=>s(q.result);q.onerror=()=>j(q.error)})};
 const idbSet=async(k,v)=>{const db=await idb();return new Promise((s,j)=>{const t=db.transaction('h','readwrite');t.objectStore('h').put(v,k);t.oncomplete=s;t.onerror=()=>j(t.error)})};
@@ -167,68 +188,90 @@ async function lock(){for(let i=0;i<40;i++){const l=await rdLock();
   if(!l||l.exp<Date.now()||l.owner===me){await wr(JSON.stringify({owner:me,user:S.user,exp:Date.now()+8000}),await dir.getFileHandle(LOCK,{create:true}));await sleep(150);const c=await rdLock();if(c&&c.owner===me)return true}
   await sleep(80+Math.random()*120)}return false}
 async function unlock(){try{const l=await rdLock();if(l&&l.owner===me)await dir.removeEntry(LOCK)}catch(e){}}
-async function backup(t,key){const b=await dir.getDirectoryHandle(BK,{create:true});
-  await wr(t,await b.getFileHandle(new Date().toISOString().replace(/[:.]/g,'-')+'_'+(key==='@cfg'?'config':key.replace('/','_'))+'.json',{create:true}));
-  const n=[];for await(const[k]of b.entries())n.push(k);n.sort();while(n.length>150)await b.removeEntry(n.shift())}
+async function backup(t,key,tag){const b=await dir.getDirectoryHandle(BK,{create:true});
+  await wr(t,await b.getFileHandle(new Date().toISOString().replace(/[:.]/g,'-')+'_'+(key==='@cfg'?'config':key.replace(/\//g,'_').replace(/\.json$/i,''))+(tag?'_'+tag:'')+'.json',{create:true}));
+  const n=[];for await(const[k]of b.entries())n.push(k);n.sort();while(n.length>300)await b.removeEntry(n.shift())}
 function validate(d){
   if(d.schema_version!==1)throw new Error('Version de schéma inconnue : '+d.schema_version);
-  if(!d.gardes)return;const ids=new Set(),u=i=>{if(ids.has(i))throw new Error('Identifiant en double : '+i);ids.add(i)};
-  for(const g of d.gardes){u(g.id);for(const s of g.services){u(s.id);for(const a of s.aff)u(a.id)}}
+  if(!d.id)return;const ids=new Set(),u=i=>{if(ids.has(i))throw new Error('Identifiant en double : '+i);ids.add(i)};
+  u(d.id);for(const s of d.services){u(s.id);for(const a of s.aff)u(a.id)}
 }
 const conflit=()=>Object.assign(new Error('Conflit : cette garde a été modifiée par un autre poste. Les données ont été rechargées. Vérifiez puis réessayez ; vos saisies restent dans le formulaire.'),{conflit:true});
 const setSt=(t,c)=>{const e=$('st');e.textContent=t;e.className=c||''};
 const sync=()=>$('sync').textContent='Synchronisation : '+tm(new Date());
 const showErr=e=>{console.error(e);const x=$('err');x.textContent=e.message;x.style.display='block'};
 
-/* Écriture sérialisée : verrou → relecture des fichiers concernés → modification → validation → écriture → relecture de contrôle → copies datées */
+/* Écriture sérialisée : verrou → relecture des fichiers concernés → modification → validation → écriture → relecture de contrôle → renommage/suppression de l'ancien fichier → copies datées */
 async function commit(fn){
   if(!dir||!D)throw new Error('Aucun dossier connecté.');
   setSt('Enregistrement en cours…','w');busy=true;let lk=false;const E=new Map();
-  const open=async key=>{if(E.has(key))return E.get(key).data;let h,init=null;
-    if(key==='@cfg')h=MO['@cfg'].h;
-    else{const[dos,mo]=key.split('/');h=await(await dir.getDirectoryHandle(dos,{create:true})).getFileHandle(mo+'.json',{create:true});
-      init={schema_version:1,type:C.types.find(t=>t.dossier===dos)?.nom||dos,mois:mo,rev:0,gardes:[],audit:[]}}
-    const t=await(await h.getFile()).text();let data;
-    if(!t.trim()&&init)data=init;else try{data=JSON.parse(t)}catch(e){throw new Error('Fichier JSON invalide ('+key+') : écriture bloquée.')}
-    E.set(key,{key,h,data});return data};
+  const readJ=async(h,key)=>{const t=await(await h.getFile()).text();try{return JSON.parse(t)}catch(e){throw new Error('Fichier JSON invalide ('+key+') : écriture bloquée.')}};
+  const ctx={
+    cfg:async()=>{if(!E.has('@cfg'))E.set('@cfg',{key:'@cfg',cfg:1,h:MO['@cfg'].h,data:await readJ(MO['@cfg'].h,'config.json')});return E.get('@cfg').data},
+    garde:async id=>{if(E.has(id))return E.get(id).data;const src=D.gardes.find(z=>z.id===id);if(!src)throw new Error('Garde introuvable.');
+      let h;try{h=await fileAtKey(src._k)}catch(e){throw conflit()}
+      const data=await readJ(h,src._k);E.set(id,{id,key:src._k,h,data});return data},
+    create:g=>{g.schema_version=1;g.audit=g.audit||[];E.set(g.id,{id:g.id,key:null,h:null,data:g,isNew:true});return g},
+    remove:id=>{const e=E.get(id);if(!e)throw new Error('Garde non ouverte.');e.del=true}};
   try{
     if(!await lock())throw new Error('Fichiers verrouillés par un autre poste. Réessayez dans quelques secondes.');lk=true;
-    const a=await fn({file:open,cfg:()=>open('@cfg')}),L=[...E.values()],main=a.cfg?E.get('@cfg'):L.find(e=>e.key!=='@cfg');
-    main.data.audit.push({id:uid(),le:new Date().toISOString(),user:S.user||'(non renseigné)',role:S.role,action:a.action,objet:a.objet,details:a.details});
-    for(const e of L){validate(e.data);e.data.rev=(e.data.rev||0)+1}
-    for(const e of[...L].reverse()){e.out=JSON.stringify(e.data,null,1);await wr(e.out,e.h)}
-    for(const e of L)if((await(await e.h.getFile()).text())!==e.out)throw new Error('Relecture différente : enregistrement non confirmé.');
-    L.forEach(e=>{MO[e.key]={h:e.h,t:e.out,data:e.data}});rebuild();setSt('Enregistrement confirmé','o');sync();$('err').style.display='none';
-    try{for(const e of L)await backup(e.out,e.key);$('bk').textContent='Dernière sauvegarde : '+tm(new Date())}catch(e){$('bk').textContent='ÉCHEC sauvegarde : '+e.message}
+    const a=await fn(ctx);if(a.cfg)await ctx.cfg();
+    const L=[...E.values()],main=a.cfg?E.get('@cfg'):L.find(e=>!e.cfg&&!e.del);if(!main)throw new Error('Aucune donnée à enregistrer.');
+    (main.data.audit=main.data.audit||[]).push({id:uid(),le:new Date().toISOString(),user:S.user||'(non renseigné)',role:S.role,action:a.action,objet:a.objet,details:a.details});
+    const W=[];
+    for(const e of L){if(e.del)continue;validate(e.data);
+      if(e.cfg){e.data.rev=(e.data.rev||0)+1;e.out=JSON.stringify(e.data,null,1);W.push(e);continue}
+      const fp=gPath(e.data),fk=fp.slice(0,3).join('/'),dh=await dirAt(fp.slice(0,3),true);let nm=fp[3]+'.json';
+      if(fk+'/'+nm!==e.key){let ex=true;try{await dh.getFileHandle(nm)}catch(x){ex=false}if(ex)nm=fp[3]+'-'+e.data.id.slice(-4)+'.json'}
+      e.nkey=fk+'/'+nm;e.dh=dh;e.nm=nm;e.out=JSON.stringify(e.data,null,1);W.push(e)}
+    for(const e of[...W].reverse()){if(e.cfg)await wr(e.out,e.h);else{e.h2=await e.dh.getFileHandle(e.nm,{create:true});await wr(e.out,e.h2)}}
+    for(const e of W){const f=await(e.cfg?e.h:e.h2).getFile();if((await f.text())!==e.out)throw new Error('Relecture différente : enregistrement non confirmé.');e.mod=f.lastModified;e.size=f.size}
+    for(const e of L){if(e.cfg)continue;if(e.del)await rmKey(e.key);else if(e.key&&e.key!==e.nkey)await rmKey(e.key)}
+    L.forEach(e=>{if(e.cfg){MO['@cfg']={h:e.h,t:e.out,data:e.data,mod:e.mod,size:e.size};return}
+      if(e.key)delete MO[e.key];if(!e.del){MO[e.nkey]={h:e.h2,t:e.out,data:e.data,mod:e.mod,size:e.size};LF.add(e.nkey.split('/').slice(0,3).join('/'))}});
+    rebuild();setSt('Enregistrement confirmé','o');sync();$('err').style.display='none';
+    try{for(const e of L){if(e.cfg)await backup(e.out,'@cfg');else if(e.del)await backup(JSON.stringify(e.data,null,1),e.key,'supprimee');else await backup(e.out,e.nkey)}$('bk').textContent='Dernière sauvegarde : '+tm(new Date())}catch(e){$('bk').textContent='ÉCHEC sauvegarde : '+e.message}
   }catch(e){setSt(e.conflit?'Conflit détecté':'Enregistrement échoué','k');if(e.conflit)try{await pollOnce(1)}catch(x){}throw e}
   finally{if(lk)await unlock();busy=false}
   render();
 }
-const upd=(id,v0,fn)=>{const g=D.gardes.find(z=>z.id===id);if(!g)throw new Error('Garde introuvable.');
-  return commit(async ctx=>{const d=await ctx.file(g._k),x=G(d,id);if(!x)throw new Error('Garde introuvable (supprimée par un autre poste ?).');if(x.v!==v0)throw conflit();const r=fn(x,d);recalc(x);x.v++;return r})};
+const upd=(id,v0,fn)=>{if(!D.gardes.find(z=>z.id===id))throw new Error('Garde introuvable.');
+  return commit(async ctx=>{const x=await ctx.garde(id);if(x.v!==v0)throw conflit();const r=fn(x,x);recalc(x);x.v++;return r})};
 
 /* Mois à charger : mois courant et précédent, plus ceux demandés par les filtres */
 function wanted(){const s=new Set(),cur=ymd(new Date()).slice(0,7);
   const rng=(a,b)=>{a=(a||b||'').slice(0,7);b=(b||a).slice(0,7);if(!a)return;let[y,m]=a.split('-').map(Number);for(let i=0;i<60;i++){const k=y+'-'+P(m);s.add(k);if(k>=b)break;if(++m>12){m=1;y++}}};
   const pm=d=>{const x=new Date((d||ymd(new Date())).slice(0,7)+'-01T00:00');x.setMonth(x.getMonth()-1);return ymd(x).slice(0,7)};
   rng(pm(),cur);rng(S.f.du,S.f.du?(S.f.au||cur):S.f.au);rng(S.h.du,S.h.du?(S.h.au||cur):S.h.au);rng(S.cmon);rng(pm(S.cday),S.cday);rng(pm(S.day),S.day);return s}
-async function loadWindow(){let ch=false;const want=wanted();
-  for(const t of C.types){let dh;try{dh=await dir.getDirectoryHandle(t.dossier)}catch(e){continue}
-    let ms=[...want];if(S.all){ms=[];for await(const[n]of dh.entries())if(/^\d{4}-\d\d\.json$/.test(n))ms.push(n.slice(0,7))}
-    for(const mo of ms){const k=t.dossier+'/'+mo;if(MO[k])continue;let h;try{h=await dh.getFileHandle(mo+'.json')}catch(e){continue}
-      const tx=await(await h.getFile()).text();const d=JSON.parse(tx);validate(d);MO[k]={h,t:tx,data:d};ch=true}}
+const LF=new Set(),SEEN=new Set();
+async function scanFolder(key,deep){const pre=key+'/';let dh,ch=false;
+  try{dh=await dirAt(key.split('/'))}catch(e){for(const k of Object.keys(MO))if(k.startsWith(pre)){delete MO[k];ch=true}return ch}
+  const names=new Map();for await(const[n,h]of dh.entries())if(h.kind==='file'&&/\.json$/i.test(n))names.set(pre+n,h);
+  for(const k of Object.keys(MO))if(k.startsWith(pre)&&!names.has(k)){delete MO[k];ch=true}
+  for(const[k,h]of names){const e=MO[k];if(e&&!deep&&e.data.statut==='traitee')continue;
+    const f=await h.getFile();if(e&&e.mod===f.lastModified&&e.size===f.size)continue;
+    const tx=await f.text();let d;try{d=JSON.parse(tx);validate(d)}catch(x){throw new Error('Fichier invalide : '+k+' ('+x.message+')')}
+    MO[k]={h,t:tx,data:d,mod:f.lastModified,size:f.size};ch=true}
+  return ch}
+async function loadWindow(deep){const keys=[];
+  if(S.all){for await(const[y,yh]of dir.entries()){if(yh.kind!=='directory'||!/^\d{4}$/.test(y))continue;
+    for(const t of C.types){const td=typeDir(t.nom);let th;try{th=await yh.getDirectoryHandle(td)}catch(e){continue}
+      for(const mo of MONTHS){try{await th.getDirectoryHandle(mo);keys.push(y+'/'+td+'/'+mo)}catch(e){}}}}}
+  else wanted().forEach(k=>{const[y,m]=k.split('-');C.types.forEach(t=>keys.push(y+'/'+typeDir(t.nom)+'/'+MONTHS[+m-1]))});
+  keys.forEach(k=>LF.add(k));let ch=false;
+  for(const k of LF){const d=deep||!SEEN.has(k);SEEN.add(k);if(await scanFolder(k,d))ch=true}
   return ch}
 const UID={police:14,barre:36,service:22,libelle:170,panneau:380,horloge:34},UIR={police:[11,22],barre:[22,64],service:[16,40],libelle:[120,320],panneau:[280,560],horloge:[20,64]};
 const UI=()=>({...UID,...(C?.affichage||{})});
 function applyUi(){const u=UI(),r=document.documentElement.style;r.setProperty('--fs',u.police+'px');r.setProperty('--bar',u.barre+'px');r.setProperty('--sv',u.service+'px');r.setProperty('--lab',u.libelle+'px');r.setProperty('--pan',u.panneau+'px');r.setProperty('--clk',u.horloge+'px')}
-function rebuild(){C=MO['@cfg'].data;applyUi();const m=new Map(),au=[];
-  for(const[k,e]of Object.entries(MO)){au.push(...e.data.audit);if(k!=='@cfg')e.data.gardes.forEach(g=>{g._k=k;m.set(g.id,g)})}
+function rebuild(){C=MO['@cfg'].data;applyUi();const m=new Map(),au=[...(C.audit||[])];
+  for(const[k,e]of Object.entries(MO)){if(k==='@cfg')continue;const g=e.data;g._k=k;au.push(...(g.audit||[]));const o=m.get(g.id);if(!o||(o.v||0)<=(g.v||0))m.set(g.id,g)}
   D={gardes:[...m.values()],audit:au.sort((a,b)=>a.le<b.le?-1:1)}}
-async function pollOnce(q){let ch=await loadWindow();
-  for(const e of Object.values(MO)){const t=await(await e.h.getFile()).text();if(t!==e.t){const d=JSON.parse(t);validate(d);e.t=t;e.data=d;ch=true}}
+async function pollOnce(q){S.pn=(S.pn||0)+1;let ch=await loadWindow(S.pn%6===0);
+  const c=MO['@cfg'],f=await c.h.getFile();if(f.lastModified!==c.mod||f.size!==c.size){const t=await f.text(),d=JSON.parse(t);validate(d);MO['@cfg']={h:c.h,t,data:d,mod:f.lastModified,size:f.size};ch=true}
   if(ch){rebuild();if(!$('dlg').open)render();if(!q)setSt('Données mises à jour (autre poste)','o')}sync()}
-const note=()=>{const ms=Object.keys(MO).filter(k=>k!=='@cfg').map(k=>k.split('/')[1]).sort();return`<p class="m">Mois chargés : ${ms.length?ms[0]+' → '+ms[ms.length-1]:'aucun'}${S.all?' (tout)':' · <button class="s" data-a="loadAll">Tout charger</button>'}</p>`};
-const dupChk=(num,id)=>{if(num&&D.gardes.some(g=>g.id!==id&&g.numero.toLowerCase()===num.toLowerCase())&&!confirm('Une garde avec l’ID « '+num+' » existe déjà. Continuer ?'))throw new Error('Enregistrement annulé.')};
+const note=()=>{const ms=[...LF].map(k=>{const p=k.split('/');return p[0]+'-'+P(MONTHS.indexOf(p[2])+1)}).sort();return`<p class="m">Mois chargés : ${ms.length?ms[0]+' → '+ms[ms.length-1]:'aucun'}${S.all?' (tout)':' · <button class="s" data-a="loadAll">Tout charger</button>'}</p>`};
+const dupChk=(num,id)=>{if(num&&D.gardes.some(g=>g.id!==id&&(g.numero||'').toLowerCase()===num.toLowerCase())&&!confirm('Une garde avec l’ID « '+num+' » existe déjà. Continuer ?'))throw new Error('Enregistrement annulé.')};
 
 /* ===== Comptes administrateur (admin.json, mots de passe hachés PBKDF2) ===== */
 const hx=async(pw,salt)=>{if(!crypto.subtle)throw new Error('Hachage indisponible dans ce contexte.');const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveBits']);
@@ -251,18 +294,18 @@ async function openDir(d){
   dir=d;let ch;
   try{ch=await dir.getFileHandle(FILE)}catch(e){
     if(e.name!=='NotFoundError')throw e;
-    if(!confirm('Aucune configuration dans ce dossier. Créer un espace de données vide (config.json et un dossier par type de garde) ?'))return;
-    ch=await dir.getFileHandle(FILE,{create:true});const c=seed(),mo=ymd(new Date()).slice(0,7);await wr(JSON.stringify(c,null,1),ch);
-    for(const t of c.types)await wr(JSON.stringify({schema_version:1,type:t.nom,mois:mo,rev:0,gardes:[],audit:[]},null,1),await(await dir.getDirectoryHandle(t.dossier,{create:true})).getFileHandle(mo+'.json',{create:true}));
+    if(!confirm('Aucune configuration dans ce dossier. Créer un espace de données vide (config.json et l’arborescence AAAA/Type/Mois) ?'))return;
+    ch=await dir.getFileHandle(FILE,{create:true});const c=seed();await wr(JSON.stringify(c,null,1),ch);
+    for(const t of c.types)await dirAt([String(new Date().getFullYear()),t.dossier],true);
   }
-  const tx=await(await ch.getFile()).text();
+  const fl=await ch.getFile(),tx=await fl.text();
   try{const c=JSON.parse(tx);validate(c);if(!c.types||!c.services)throw new Error('configuration incomplète');
-    for(const k in MO)delete MO[k];MO['@cfg']={h:ch,t:tx,data:c};rebuild();await loadWindow();rebuild()}
+    for(const k in MO)delete MO[k];LF.clear();SEEN.clear();MO['@cfg']={h:ch,t:tx,data:c,mod:fl.lastModified,size:fl.size};rebuild();await loadWindow();rebuild()}
   catch(e){D=null;throw new Error('Configuration illisible ou invalide ('+e.message+'). Aucune écriture effectuée.')}
   setSt('Connecté','o');sync();render();
 }
 const seed=()=>({schema_version:1,rev:0,
-  pool:[],types:[{nom:'Garde détenu',couleur:'#1f6fd6',dossier:'garde-detenu'},{nom:'Garde patient',couleur:'#2e9e4f',dossier:'garde-patient'}],
+  pool:[],types:[{nom:'Garde détenu',couleur:'#1f6fd6',dossier:'Detenu'},{nom:'Garde patient',couleur:'#2e9e4f',dossier:'Patient'}],
   services:[{nom:'Matin',couleur:'#d99a00',debut:'07:45',fin:'16:00'},{nom:'Après-midi',couleur:'#d9622b',debut:'15:45',fin:'24:00'},{nom:'Nuit',couleur:'#4a4fa3',debut:'23:45',fin:'08:00'}],audit:[]});
 
 /* ===== Formulaires ===== */
@@ -348,11 +391,9 @@ function pdfExport(g,du,au,reels){const u=URL.createObjectURL(new Blob([pdfBytes
 /* ===== Actions ===== */
 const cur=()=>G(D,S.sel);
 async function mkG(f,from){const id=uid();
-  await commit(async ctx=>{const d=await ctx.file(kOf(f.type,toI(f.debut_prevu)));
-    const g={id,numero:'',statut:'en_cours',cree_le:new Date().toISOString(),v:1,services:[],fin_prevue:'',fin_reel:'',liens:[]};
-    apply(g,f,KG);g.debut_reel=g.debut_prevu;d.gardes.push(g);let det='';
-    if(from){const src=D.gardes.find(z=>z.id===from),sx=G(await ctx.file(src._k),from);if(!sx)throw new Error('Garde d’origine introuvable.');
-      sx.liens=[...(sx.liens||[]),{id,numero:g.numero}];sx.v++;g.liens=[{id:from,numero:sx.numero}];det='suite de '+sx.numero}
+  await commit(async ctx=>{const g={id,numero:'',statut:'en_cours',cree_le:new Date().toISOString(),v:1,services:[],fin_prevue:'',fin_reel:'',liens:[]};
+    apply(g,f,KG);g.debut_reel=g.debut_prevu;ctx.create(g);let det='';
+    if(from){const sx=await ctx.garde(from);sx.liens=[...(sx.liens||[]),{id,numero:g.numero}];sx.v++;g.liens=[{id:from,numero:sx.numero}];det='suite de '+oid(sx)}
     return{action:'Création garde',objet:oid(g),details:det}});
   S.sel=id;render()}
 function LK(g,ed){const tk=z=>z.x?T(z.x.debut_reel||z.x.debut_prevu):0,del=id=>ed?` <button class="x" data-a="delier" data-id="${id}" aria-label="Supprimer le lien">✕</button>`:'';
@@ -388,23 +429,22 @@ const H={
     if(!c.length)throw new Error('Aucune garde chargée avec cet ID. Si elle est ancienne, utilisez « Tout charger ».');
     if(c.length>1)throw new Error('Plusieurs gardes correspondent : '+c.map(z=>z.numero+' ('+fmt(z.debut_prevu).slice(0,10)+')').join(', ')+'. Saisissez l’ID exact.');
     const o=c[0];if((g.liens||[]).some(k=>k.id===o.id))throw new Error('Ces deux gardes sont déjà liées.');
-    await commit(async ctx=>{const a=G(await ctx.file(g._k),g.id),b=G(await ctx.file(o._k),o.id);if(!a||!b)throw new Error('Garde introuvable.');if(a.v!==v0)throw conflit();
+    await commit(async ctx=>{const a=await ctx.garde(g.id),b=await ctx.garde(o.id);if(a.v!==v0)throw conflit();
       a.liens=[...(a.liens||[]),{id:b.id,numero:b.numero}];b.liens=[...(b.liens||[]),{id:a.id,numero:a.numero}];a.v++;b.v++;
       return{action:'Lien entre gardes',objet:oid(a),details:'lié à '+b.numero}})})},
   delier:async t=>{const g=cur();if(!confirm('Supprimer le lien avec cette garde ?'))return;
-    await commit(async ctx=>{const a=G(await ctx.file(g._k),g.id);if(!a)throw new Error('Garde introuvable.');a.liens=(a.liens||[]).filter(k=>k.id!==t.id);a.v++;
-      const o=D.gardes.find(z=>z.id===t.id);if(o){const b=G(await ctx.file(o._k),o.id);if(b){b.liens=(b.liens||[]).filter(k=>k.id!==g.id);b.v++}}
+    await commit(async ctx=>{const a=await ctx.garde(g.id);a.liens=(a.liens||[]).filter(k=>k.id!==t.id);a.v++;
+      const o=D.gardes.find(z=>z.id===t.id);if(o){const b=await ctx.garde(o.id);b.liens=(b.liens||[]).filter(k=>k.id!==g.id);b.v++}
       return{action:'Lien supprimé',objet:oid(a),details:o?o.numero:t.id}})},
   rstUi:()=>commit(async ctx=>{const cf=await ctx.cfg();delete cf.affichage;return{cfg:1,action:'Affichage',objet:'valeurs par défaut'}}),
   editG:()=>{const g=cur(),v0=g.v;form('Modifier la garde '+esc(g.numero),gf(g),async f=>{f.numero=f.numero.trim();dupChk(f.numero,g.id);if(f.fin_prevue)chkT(f.debut_prevu,f.fin_prevue);
-    await commit(async ctx=>{const k0=g._k,d0=await ctx.file(k0),x=G(d0,g.id);if(!x)throw new Error('Garde introuvable.');if(x.v!==v0)throw conflit();
-      const dt=apply(x,f,KG);x.debut_reel=x.debut_prevu;recalc(x);x.v++;const k1=kOf(x.type,x.debut_prevu);
-      if(k1!==k0){d0.gardes.splice(d0.gardes.indexOf(x),1);(await ctx.file(k1)).gardes.push(x)}
-      return{action:'Modification garde',objet:oid(x),details:dt+(k1!==k0?' ; déplacée vers '+k1:'')}})})},
+    await commit(async ctx=>{const x=await ctx.garde(g.id);if(x.v!==v0)throw conflit();const p0=gPath(x).slice(0,3).join('/');
+      const dt=apply(x,f,KG);x.debut_reel=x.debut_prevu;recalc(x);x.v++;const p1=gPath(x).slice(0,3).join('/');
+      return{action:'Modification garde',objet:oid(x),details:dt+(p0!==p1?' ; déplacée vers '+p1:'')}})})},
   delG:async()=>{const g=cur();if(!confirm('Supprimer définitivement la garde '+ref(g)+(g.numero?' ('+g.numero+')':'')+' ?\nLes copies datées antérieures du dossier « sauvegardes » permettent de la retrouver.'))return;
-    await commit(async ctx=>{const d=await ctx.file(g._k),k=d.gardes.findIndex(x=>x.id===g.id);if(k<0)throw new Error('Garde introuvable (déjà supprimée ?).');if(d.gardes[k].v!==g.v)throw conflit();
-      const x=d.gardes.splice(k,1)[0];for(const l of x.liens||[]){const o=D.gardes.find(z=>z.id===l.id);if(o){const b=G(await ctx.file(o._k),o.id);if(b){b.liens=(b.liens||[]).filter(q=>q.id!==x.id);b.v++}}}
-      return{action:'Suppression garde',objet:oid(x),details:x.type+' — début '+fmt(x.debut_prevu)}});S.sel=null;S.open.delete(g.id);render()},
+    await commit(async ctx=>{const x=await ctx.garde(g.id);if(x.v!==g.v)throw conflit();
+      for(const l of x.liens||[]){if(D.gardes.some(z=>z.id===l.id)){const b=await ctx.garde(l.id);b.liens=(b.liens||[]).filter(q=>q.id!==x.id);b.v++}}
+      ctx.remove(x.id);return{cfg:1,action:'Suppression garde',objet:oid(x),details:x.type+' — début '+fmt(x.debut_prevu)}});S.sel=null;S.open.delete(g.id);render()},
   addA:()=>{const g=cur(),v0=g.v;
     form('Affecter des agents',[{k:'service',l:'Service',o:C.services.map(z=>z.nom),v:C.services[0]?.nom},{k:'agent',l:'Agents : nom, prénom ou matricule, séparés par une virgule (un agent hors pool peut être saisi librement)',r:1,v:''},
       {k:'piquet',l:'Droit à la rémunération de piquet (agent arrivé sur la surveillance en moins de 3 h)',t:'checkbox',v:false},
@@ -430,14 +470,14 @@ const H={
       {k:'reels',l:'Horaires',o:[['1','Prévus et réels'],['0','Prévus seulement']],v:'1'}],async f=>{
       if(f.au<f.du)throw new Error('Le jour de fin doit être postérieur ou égal au jour de début.');
       pdfExport(g,f.du,f.au,f.reels==='1');
-      try{await commit(async ctx=>{await ctx.file(g._k);return{action:'Export PDF',objet:oid(g),details:'du '+f.du+' au '+f.au}})}
+      try{await commit(async ctx=>{await ctx.garde(g.id);return{action:'Export PDF',objet:oid(g),details:'du '+f.du+' au '+f.au}})}
       catch(e){showErr(new Error('PDF créé, mais l’export n’a pas pu être journalisé : '+e.message))}})},
   mvT:t=>commit(async ctx=>{const cf=await ctx.cfg(),i=cf.types.findIndex(x=>x.nom===t.n),j=i+ +t.d;if(i<0||j<0||j>=cf.types.length)throw new Error('Déplacement impossible.');
     [cf.types[i],cf.types[j]]=[cf.types[j],cf.types[i]];return{cfg:1,action:'Ordre des types de garde',objet:t.n,details:'position '+(j+1)}}),
   addT:()=>form('Nouveau type de garde',[{k:'nom',l:'Nom du type',r:1,v:''},{k:'couleur',l:'Couleur',t:'color',v:'#d9622b'}],f=>commit(async ctx=>{
     const cf=await ctx.cfg(),n=f.nom.trim();if(cf.types.some(t=>t.nom.toLowerCase()===n.toLowerCase()))throw new Error('Ce type existe déjà.');
-    const t={nom:n,couleur:f.couleur,dossier:slug(n)};if(cf.types.some(x=>x.dossier===t.dossier))t.dossier+='-'+cf.types.length;cf.types.push(t);
-    await ctx.file(t.dossier+'/'+ymd(new Date()).slice(0,7));return{cfg:1,action:'Nouveau type de garde',objet:n,details:t.dossier+'/'}})),
+    const t={nom:n,couleur:f.couleur,dossier:capSlug(n)};if(cf.types.some(x=>x.dossier===t.dossier))t.dossier+='-'+cf.types.length;cf.types.push(t);
+    await dirAt([String(new Date().getFullYear()),t.dossier],true);return{cfg:1,action:'Nouveau type de garde',objet:n,details:'AAAA/'+t.dossier+'/Mois/'}})),
   addSv:()=>form('Nouveau type de service',[{k:'nom',l:'Nom du service',r:1,v:''},{k:'couleur',l:'Couleur',t:'color',v:'#7a4fa3'},{k:'debut',l:'Heure de début (facultatif)',t:'time',v:''},{k:'fin',l:'Heure de fin (facultatif)',t:'time',v:''}],f=>commit(async ctx=>{
     const cf=await ctx.cfg(),n=f.nom.trim();if(cf.services.some(t=>t.nom.toLowerCase()===n.toLowerCase()))throw new Error('Ce service existe déjà.');
     cf.services.push({nom:n,couleur:f.couleur,debut:f.debut,fin:f.fin});return{cfg:1,action:'Nouveau type de service',objet:n}})),
@@ -557,7 +597,7 @@ function vAdmin(){
   if(!adm())return'<div class="c">Réservé à l’administrateur (connexion requise).</div>';
   const col=(k,x)=>`<input type="color" value="${esc(x.couleur)}" data-col="${k}" data-n="${esc(x.nom)}" aria-label="Couleur de ${esc(x.nom)}">`;
   return`<div class="c"><h2>Administration</h2><p class="m">Connecté : ${esc(S.admin)}</p>
-  <h3>Types de gardes <button class="s" data-a="addT">+ Type</button></h3><table>${C.types.map((t,i)=>`<tr><td>${col('types',t)}</td><td>${esc(t.nom)}</td><td class="m">${esc(t.dossier)}/AAAA-MM.json</td><td><button class="s" data-a="mvT" data-n="${esc(t.nom)}" data-d="-1"${i?'':' disabled'} aria-label="Monter">↑</button> <button class="s" data-a="mvT" data-n="${esc(t.nom)}" data-d="1"${i<C.types.length-1?'':' disabled'} aria-label="Descendre">↓</button></td></tr>`).join('')}</table>
+  <h3>Types de gardes <button class="s" data-a="addT">+ Type</button></h3><table>${C.types.map((t,i)=>`<tr><td>${col('types',t)}</td><td>${esc(t.nom)}</td><td class="m">AAAA/${esc(typeDir(t.nom))}/Mois/</td><td><button class="s" data-a="mvT" data-n="${esc(t.nom)}" data-d="-1"${i?'':' disabled'} aria-label="Monter">↑</button> <button class="s" data-a="mvT" data-n="${esc(t.nom)}" data-d="1"${i<C.types.length-1?'':' disabled'} aria-label="Descendre">↓</button></td></tr>`).join('')}</table>
   <h3>Types de services <button class="s" data-a="addSv">+ Service</button></h3><table>${C.services.map(t=>`<tr><td>${col('services',t)}</td><td>${esc(t.nom)}</td><td class="m">${t.debut&&t.fin?t.debut+'–'+t.fin:'horaires à saisir'}</td></tr>`).join('')}</table>
   ${poolView()}
   ${ltrForm()}
@@ -571,7 +611,7 @@ function detail(){
   const g=D.gardes.find(x=>x.id===S.sel);if(!g)return'<div class="c m">Sélectionnez une garde pour afficher sa fiche.</div>';
   const ed=canEdit(g),c=g.statut==='en_cours'&&rw(),nm=S.role==='Consultation',row=(a,b)=>`<tr><td class="m">${a}</td><td>${b}</td></tr>`;
   const w=[],LT=ltrIndex();g.services.forEach(s=>s.aff.forEach(a=>{if(!(T(a.fin)>T(a.debut)))w.push(AN(a.agent)+' : horaires incohérents');warns(D,{...a,nom:AN(a.agent)}).forEach(x=>w.push(AN(a.agent)+' : '+x));(LT.get(a.id)||[]).forEach(m=>w.push(AN(a.agent)+' : LTR — '+m))}));
-  const au=D.audit.filter(a=>a.objet===oid(g)).slice(-6).reverse();
+  const au=(g.audit||[]).slice(-6).reverse();
   return`<div class="c"><h2>${esc(ref(g))} <span class="chip ${g.statut}">${LBL[g.statut]}</span></h2><table>${row('ID',esc(g.numero))}${row('Type',dot(g.type)+esc(g.type))}${row('Localisation',esc(g.localisation))}${g.provenance?row('Provenance',nm?'(masqué)':esc(g.provenance)):''}${g.tel_service?row('Téléphone de service',esc(g.tel_service)):''}${g.radio_service?row('Radio de service',esc(g.radio_service)):''}${row('Risques',nm?'(masqué)':esc(g.risques))}
   ${row('Début',fmt(g.debut_prevu))}${row('Fin (selon les agents)',fmt(g.fin_reel||g.fin_prevue))}${g.traite_le?row('Traitée',fmt(g.traite_le)+' par '+esc(g.traite_par)):''}</table>
   <p>${ed?'<button data-a="editG">Modifier</button> ':''}${rw()?'<button class="s" data-a="exportG">Exporter en PDF</button> ':''}${c?'<button data-a="clot">Clôturer</button> ':''}${g.statut==='a_traiter'&&rw()?'<button data-a="trait">Marquer traitée</button> ':''}${g.statut==='traitee'&&adm()?'<button class="x" data-a="reopen">Rouvrir</button>':''}${ed?' <button class="x" data-a="delG">Supprimer</button>':''}</p>
