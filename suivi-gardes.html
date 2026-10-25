@@ -75,6 +75,7 @@ dialog label{display:block;margin:7px 0}dialog input,dialog select,dialog textar
 <main id="app"></main>
 <button id="pan" data-a="pan" aria-expanded="true" aria-label="Masquer le panneau de détail" title="Masquer / afficher le panneau de détail">»</button>
 <dialog id="dlg"></dialog>
+<dialog id="dlg2"></dialog>
 
 <script>
 'use strict';
@@ -88,17 +89,21 @@ const toL=i=>{if(!i)return'';const d=new Date(i);return ymd(d)+'T'+tm(i)},toI=l=
 const LBL={en_cours:'En cours',a_traiter:'Terminée — à traiter',traitee:'Traitée'};
 const ls=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k)||'';localStorage.setItem(k,v)}catch(e){return''}};
 const S={view:'dash',sel:null,pan:ls('gpan')!=='0',gs:'type',all:false,admin:null,open:new Set(),cday:ymd(new Date()),cmon:ymd(new Date()).slice(0,7),day:ymd(new Date()),grp:'mois',f:{},h:{},sort:{k:'debut',d:-1},user:ls('gu'),role:(ls('gr')==='Administrateur'?'':ls('gr'))||'Opérateur'};
-let D=null,C=null,dir=null,busy=false;const MO={};
+let D=null,C=null,AG=null,dir=null,busy=false;const MO={};
 const rw=()=>S.role!=='Consultation',adm=()=>S.role==='Administrateur',canEdit=g=>adm()||(rw()&&g.statut!=='traitee');
 const G=(d,id)=>d.gardes.find(g=>g.id===id),AN=a=>a||'?',isPq=a=>a.piquet===true||a.mode==='piquet';
+function choose(title,label,opts){return new Promise((res,rej)=>{const d=$('dlg2');
+  d.innerHTML=`<form method="dialog"><h3>${esc(title)}</h3><label>${esc(label)}<select name="v">${opts.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select></label><p><button>Valider</button> <button type="button" class="s" data-a="close2">Annuler</button></p></form>`;
+  let done=false;const fm=d.querySelector('form');fm.onsubmit=e=>{e.preventDefault();done=true;res(fm.elements.v.value);d.close()};
+  d.addEventListener('close',()=>{if(!done)rej(new Error('Choix annulé.'))},{once:true});d.showModal()})}
 const nz=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
-const PL=()=>C?.pool||[],pcan=p=>p.nom.toUpperCase()+' '+p.prenom,dh=m=>{m=Math.round(m);return Math.floor(m/60)+'h'+P(m%60)};
+const PL=()=>AG?.pool||[],pcan=p=>p.nom.toUpperCase()+' '+p.prenom,dh=m=>{m=Math.round(m);return Math.floor(m/60)+'h'+P(m%60)};
 /* Agent du pool : retrouvé par matricule, "nom prénom", "prénom nom" ou nom seul s'il est unique ; sinon agent hors pool, gardé tel que saisi */
 function resolveAg(txt){const t=nz(txt),pl=PL();if(!t)return{agent:'',mat:''};
   let m=pl.filter(p=>nz(p.mat)===t);
   if(!m.length)m=pl.filter(p=>nz(p.nom+' '+p.prenom)===t||nz(p.prenom+' '+p.nom)===t);
   if(!m.length)m=pl.filter(p=>nz(p.nom)===t);
-  if(m.length>1)throw new Error('Plusieurs agents du pool correspondent à « '+String(txt).trim()+' » : '+m.map(p=>pcan(p)+' ('+p.mat+')').join(', ')+'. Précisez avec le prénom ou le matricule.');
+  if(m.length>1)return{agent:String(txt).trim(),mat:'',amb:m};
   return m.length?{agent:pcan(m[0]),mat:m[0].mat,p:m[0]}:{agent:String(txt).trim(),mat:''}}
 /* LTR : règles modifiables dans l'administration */
 const LTRD={jours:6,repos:10,sem:35,jour:13,pjour:14,nuit:11,pnuit:13},LTRC=()=>({...LTRD,...(C?.ltr||{})}),isNightSv=t=>/nuit/i.test(t||'');
@@ -132,6 +137,9 @@ function ltrCheck(cands,excl){const all=shiftsAll(),res=[];
   [...new Set(cands.map(c=>c.mat))].forEach(mat=>{const ex=(all.get(mat)||[]).filter(x=>x.id!==excl),nw=cands.filter(c=>c.mat===mat).map((c,i)=>({id:'new'+i,mat,nom:c.nom,type:c.type,s:c.s,e:c.e}));
     const b=ltrOf(ex.map(x=>({...x}))),a=ltrOf([...ex,...nw].map(x=>({...x}))),k=(id,m)=>id+'|'+m,bs=new Set([...b].flatMap(([id,ms])=>ms.map(m=>k(id,m)))),L=[...ex,...nw];
     a.forEach((ms,id)=>ms.forEach(m=>{if(!bs.has(k(id,m))){const x=L.find(z=>z.id===id);res.push(x.nom+' — '+fmt(new Date(x.s).toISOString()).slice(0,5)+' '+x.type+' : '+m)}}))});return res}
+async function resolveAsk(txt){const r=resolveAg(txt);if(!r.amb)return r;
+  const mat=await choose('Plusieurs agents correspondent à « '+String(txt).trim()+' »','Choisissez la bonne personne',r.amb.map(p=>[p.mat,pcan(p)+' — matricule '+p.mat+(p.actif===false?' (inactif)':'')]));
+  const p=r.amb.find(x=>x.mat===mat);return{agent:pcan(p),mat:p.mat,p}}
 function agStats(){const m=new Map(),sh=shiftsAll();
   D.gardes.forEach(g=>g.services.forEach(v=>{if(v.type==='Pause')return;v.aff.forEach(a=>{if(!a.mat)return;const r=a.debut_reel&&a.fin_reel,h=(T(r?a.fin_reel:a.fin)-T(r?a.debut_reel:a.debut))/36e5;
     if(!m.has(a.mat))m.set(a.mat,{n:0,h:0,pq:0,lt:0});const o=m.get(a.mat);o.n++;o.h+=h||0;if(isPq(a))o.pq++})}));
@@ -189,7 +197,7 @@ async function lock(){for(let i=0;i<40;i++){const l=await rdLock();
   await sleep(80+Math.random()*120)}return false}
 async function unlock(){try{const l=await rdLock();if(l&&l.owner===me)await dir.removeEntry(LOCK)}catch(e){}}
 async function backup(t,key,tag){const b=await dir.getDirectoryHandle(BK,{create:true});
-  await wr(t,await b.getFileHandle(new Date().toISOString().replace(/[:.]/g,'-')+'_'+(key==='@cfg'?'config':key.replace(/\//g,'_').replace(/\.json$/i,''))+(tag?'_'+tag:'')+'.json',{create:true}));
+  await wr(t,await b.getFileHandle(new Date().toISOString().replace(/[:.]/g,'-')+'_'+(key==='@cfg'?'config':key==='@pool'?'agents':key.replace(/\//g,'_').replace(/\.json$/i,''))+(tag?'_'+tag:'')+'.json',{create:true}));
   const n=[];for await(const[k]of b.entries())n.push(k);n.sort();while(n.length>300)await b.removeEntry(n.shift())}
 function validate(d){
   if(d.schema_version!==1)throw new Error('Version de schéma inconnue : '+d.schema_version);
@@ -207,6 +215,7 @@ async function commit(fn){
   setSt('Enregistrement en cours…','w');busy=true;let lk=false;const E=new Map();
   const readJ=async(h,key)=>{const t=await(await h.getFile()).text();try{return JSON.parse(t)}catch(e){throw new Error('Fichier JSON invalide ('+key+') : écriture bloquée.')}};
   const ctx={
+    pool:async()=>{if(!E.has('@pool'))E.set('@pool',{key:'@pool',cfg:1,h:MO['@pool'].h,data:await readJ(MO['@pool'].h,'agents.json')});return E.get('@pool').data},
     cfg:async()=>{if(!E.has('@cfg'))E.set('@cfg',{key:'@cfg',cfg:1,h:MO['@cfg'].h,data:await readJ(MO['@cfg'].h,'config.json')});return E.get('@cfg').data},
     garde:async id=>{if(E.has(id))return E.get(id).data;const src=D.gardes.find(z=>z.id===id);if(!src)throw new Error('Garde introuvable.');
       let h;try{h=await fileAtKey(src._k)}catch(e){throw conflit()}
@@ -215,8 +224,8 @@ async function commit(fn){
     remove:id=>{const e=E.get(id);if(!e)throw new Error('Garde non ouverte.');e.del=true}};
   try{
     if(!await lock())throw new Error('Fichiers verrouillés par un autre poste. Réessayez dans quelques secondes.');lk=true;
-    const a=await fn(ctx);if(a.cfg)await ctx.cfg();
-    const L=[...E.values()],main=a.cfg?E.get('@cfg'):L.find(e=>!e.cfg&&!e.del);if(!main)throw new Error('Aucune donnée à enregistrer.');
+    const a=await fn(ctx);if(a.cfg)await ctx.cfg();if(a.pool)await ctx.pool();
+    const L=[...E.values()],main=a.pool?E.get('@pool'):a.cfg?E.get('@cfg'):L.find(e=>!e.cfg&&!e.del);if(!main)throw new Error('Aucune donnée à enregistrer.');
     (main.data.audit=main.data.audit||[]).push({id:uid(),le:new Date().toISOString(),user:S.user||'(non renseigné)',role:S.role,action:a.action,objet:a.objet,details:a.details});
     const W=[];
     for(const e of L){if(e.del)continue;validate(e.data);
@@ -227,10 +236,10 @@ async function commit(fn){
     for(const e of[...W].reverse()){if(e.cfg)await wr(e.out,e.h);else{e.h2=await e.dh.getFileHandle(e.nm,{create:true});await wr(e.out,e.h2)}}
     for(const e of W){const f=await(e.cfg?e.h:e.h2).getFile();if((await f.text())!==e.out)throw new Error('Relecture différente : enregistrement non confirmé.');e.mod=f.lastModified;e.size=f.size}
     for(const e of L){if(e.cfg)continue;if(e.del)await rmKey(e.key);else if(e.key&&e.key!==e.nkey)await rmKey(e.key)}
-    L.forEach(e=>{if(e.cfg){MO['@cfg']={h:e.h,t:e.out,data:e.data,mod:e.mod,size:e.size};return}
+    L.forEach(e=>{if(e.cfg){MO[e.key]={h:e.h,t:e.out,data:e.data,mod:e.mod,size:e.size};return}
       if(e.key)delete MO[e.key];if(!e.del){MO[e.nkey]={h:e.h2,t:e.out,data:e.data,mod:e.mod,size:e.size};LF.add(e.nkey.split('/').slice(0,3).join('/'))}});
     rebuild();setSt('Enregistrement confirmé','o');sync();$('err').style.display='none';
-    try{for(const e of L){if(e.cfg)await backup(e.out,'@cfg');else if(e.del)await backup(JSON.stringify(e.data,null,1),e.key,'supprimee');else await backup(e.out,e.nkey)}$('bk').textContent='Dernière sauvegarde : '+tm(new Date())}catch(e){$('bk').textContent='ÉCHEC sauvegarde : '+e.message}
+    try{for(const e of L){if(e.cfg)await backup(e.out,e.key);else if(e.del)await backup(JSON.stringify(e.data,null,1),e.key,'supprimee');else await backup(e.out,e.nkey)}$('bk').textContent='Dernière sauvegarde : '+tm(new Date())}catch(e){$('bk').textContent='ÉCHEC sauvegarde : '+e.message}
   }catch(e){setSt(e.conflit?'Conflit détecté':'Enregistrement échoué','k');if(e.conflit)try{await pollOnce(1)}catch(x){}throw e}
   finally{if(lk)await unlock();busy=false}
   render();
@@ -264,11 +273,11 @@ async function loadWindow(deep){const keys=[];
 const UID={police:14,barre:36,service:22,libelle:170,panneau:380,horloge:34},UIR={police:[11,22],barre:[22,64],service:[16,40],libelle:[120,320],panneau:[280,560],horloge:[20,64]};
 const UI=()=>({...UID,...(C?.affichage||{})});
 function applyUi(){const u=UI(),r=document.documentElement.style;r.setProperty('--fs',u.police+'px');r.setProperty('--bar',u.barre+'px');r.setProperty('--sv',u.service+'px');r.setProperty('--lab',u.libelle+'px');r.setProperty('--pan',u.panneau+'px');r.setProperty('--clk',u.horloge+'px')}
-function rebuild(){C=MO['@cfg'].data;applyUi();const m=new Map(),au=[...(C.audit||[])];
-  for(const[k,e]of Object.entries(MO)){if(k==='@cfg')continue;const g=e.data;g._k=k;au.push(...(g.audit||[]));const o=m.get(g.id);if(!o||(o.v||0)<=(g.v||0))m.set(g.id,g)}
+function rebuild(){C=MO['@cfg'].data;AG=MO['@pool']?MO['@pool'].data:null;applyUi();const m=new Map(),au=[...(C.audit||[]),...(AG?.audit||[])];
+  for(const[k,e]of Object.entries(MO)){if(k==='@cfg'||k==='@pool')continue;const g=e.data;g._k=k;au.push(...(g.audit||[]));const o=m.get(g.id);if(!o||(o.v||0)<=(g.v||0))m.set(g.id,g)}
   D={gardes:[...m.values()],audit:au.sort((a,b)=>a.le<b.le?-1:1)}}
 async function pollOnce(q){S.pn=(S.pn||0)+1;let ch=await loadWindow(S.pn%6===0);
-  const c=MO['@cfg'],f=await c.h.getFile();if(f.lastModified!==c.mod||f.size!==c.size){const t=await f.text(),d=JSON.parse(t);validate(d);MO['@cfg']={h:c.h,t,data:d,mod:f.lastModified,size:f.size};ch=true}
+  for(const k of['@cfg','@pool']){const c=MO[k],f=await c.h.getFile();if(f.lastModified!==c.mod||f.size!==c.size){const t=await f.text(),d=JSON.parse(t);validate(d);MO[k]={h:c.h,t,data:d,mod:f.lastModified,size:f.size};ch=true}}
   if(ch){rebuild();if(!$('dlg').open)render();if(!q)setSt('Données mises à jour (autre poste)','o')}sync()}
 const note=()=>{const ms=[...LF].map(k=>{const p=k.split('/');return p[0]+'-'+P(MONTHS.indexOf(p[2])+1)}).sort();return`<p class="m">Mois chargés : ${ms.length?ms[0]+' → '+ms[ms.length-1]:'aucun'}${S.all?' (tout)':' · <button class="s" data-a="loadAll">Tout charger</button>'}</p>`};
 const dupChk=(num,id)=>{if(num&&D.gardes.some(g=>g.id!==id&&(g.numero||'').toLowerCase()===num.toLowerCase())&&!confirm('Une garde avec l’ID « '+num+' » existe déjà. Continuer ?'))throw new Error('Enregistrement annulé.')};
@@ -300,7 +309,10 @@ async function openDir(d){
   }
   const fl=await ch.getFile(),tx=await fl.text();
   try{const c=JSON.parse(tx);validate(c);if(!c.types||!c.services)throw new Error('configuration incomplète');
-    for(const k in MO)delete MO[k];LF.clear();SEEN.clear();MO['@cfg']={h:ch,t:tx,data:c,mod:fl.lastModified,size:fl.size};rebuild();await loadWindow();rebuild()}
+    for(const k in MO)delete MO[k];LF.clear();SEEN.clear();MO['@cfg']={h:ch,t:tx,data:c,mod:fl.lastModified,size:fl.size};
+    let ah;try{ah=await dir.getFileHandle('agents.json')}catch(e){if(e.name!=='NotFoundError')throw e;ah=await dir.getFileHandle('agents.json',{create:true});await wr(JSON.stringify({schema_version:1,rev:0,pool:c.pool||[],audit:[]},null,1),ah)}
+    const af=await ah.getFile(),at=await af.text(),ad=JSON.parse(at);validate(ad);if(!Array.isArray(ad.pool))ad.pool=[];MO['@pool']={h:ah,t:at,data:ad,mod:af.lastModified,size:af.size};
+    rebuild();await loadWindow();rebuild()}
   catch(e){D=null;throw new Error('Configuration illisible ou invalide ('+e.message+'). Aucune écriture effectuée.')}
   setSt('Connecté','o');sync();render();
 }
@@ -335,7 +347,7 @@ const af=(a,s)=>[{k:'agent',l:a.id?'Nom de l’agent':'Nom(s) des agents (sépar
 function warns(d,a){const w=[],x=T(a.debut),y=T(a.fin);
   d.gardes.forEach(h=>h.services.forEach(t=>t.aff.forEach(b=>{if(b.id!==a.id&&((b.mat&&a.mat)?b.mat===a.mat:(b.agent||'').toLowerCase()===a.nom.toLowerCase())&&T(b.debut)<y&&T(b.fin)>x)w.push('chevauchement avec '+h.numero+' ('+t.type+')')})));
   return w}
-function chkA(f,s,id,nom){chkT(f.debut,f.fin);const r=resolveAg(nom),w=warns(D,{id,nom:r.agent,mat:r.mat,debut:toI(f.debut),fin:toI(f.fin)});
+function chkA(f,s,id,r){chkT(f.debut,f.fin);const w=warns(D,{id,nom:r.agent,mat:r.mat,debut:toI(f.debut),fin:toI(f.fin)});
   if(r.p&&r.p.actif===false)w.push('agent inactif dans le pool');
   if(r.mat)ltrCheck([{mat:r.mat,nom:r.agent,type:s?s.type:'',s:T(toI(f.debut)),e:T(toI(f.fin))}],id).forEach(x=>w.push('LTR — '+x));
   if(w.length&&!confirm('Alerte ('+r.agent+') :\n'+w.join('\n')+'\nEnregistrer quand même ?'))throw new Error('Enregistrement annulé.')}
@@ -400,7 +412,7 @@ function LK(g,ed){const tk=z=>z.x?T(z.x.debut_reel||z.x.debut_prevu):0,del=id=>e
   const l=(g.liens||[]).map(k=>({k,x:D.gardes.find(z=>z.id===k.id)})).sort((a,b)=>tk(a)-tk(b)),me=T(g.debut_reel||g.debut_prevu);
   return`<h3>Surveillances liées</h3><ul>${l.map(({k,x})=>x?`<li><span class="lk" tabindex="0" data-a="selG" data-id="${x.id}">${dot(x.type)}<b>${esc(ref(x))}</b> · ${esc(x.numero)}</span> <span class="chip ${x.statut}">${LBL[x.statut]}</span> <span class="m">${tk({x})<me?'avant':'après'} · ${fmt(x.debut_reel||x.debut_prevu)}</span>${del(x.id)}</li>`:`<li class="m">${esc(k.numero)} (non chargée : « Tout charger »)${del(k.id)}</li>`).join('')||'<li class="m">Aucune.</li>'}</ul>${ed?'<p><button class="s" data-a="lier">+ Lier à une garde</button> <button class="s" data-a="suite">+ Créer la suite</button></p>':''}`}
 const H={
-  go:t=>{S.view=t.v;render()},close:()=>$('dlg').close(),
+  go:t=>{S.view=t.v;render()},close:()=>$('dlg').close(),close2:()=>$('dlg2').close(),
   selG:t=>{S.sel=t.id;if(!S.pan){S.pan=true;ls('gpan','1')}render()},
   tgP:t=>{const g=cur();return upd(g.id,g.v,x=>{const a=x.services.find(z=>z.id===t.s).aff.find(z=>z.id===t.i),n=!isPq(a);a.piquet=n;delete a.mode;return{action:'Piquet',objet:oid(x),details:a.agent+' : '+(n?'droit au piquet':'sans piquet')}}).catch(e=>{render();throw e})},
   pan:()=>{S.pan=!S.pan;ls('gpan',S.pan?'1':'0');render()},
@@ -414,16 +426,16 @@ const H={
     form('Nouvelle garde',gf(pre),async f=>{f.numero=f.numero.trim();dupChk(f.numero,'');await mkG(f,null)},refInit)},
   suite:()=>{const g=cur(),pre={personne:g.personne,type:g.type,provenance:g.provenance,risques:g.risques,debut_prevu:g.fin_reel||g.fin_prevue||new Date().toISOString()};pre.numero=refNext(pre.type,pre.debut_prevu);
     form('Créer la suite de '+esc(g.numero||ref(g)),gf(pre),async f=>{f.numero=f.numero.trim();dupChk(f.numero,'');await mkG(f,g.id)},refInit)},
-  poolAdd:()=>form('Nouvel agent du pool',AGF({}),f=>commit(async ctx=>{const cf=await ctx.cfg();cf.pool=cf.pool||[];const mat=f.mat.trim();if(cf.pool.some(p=>nz(p.mat)===nz(mat)))throw new Error('Ce matricule existe déjà.');
-    cf.pool.push({mat,nom:f.nom.trim(),prenom:f.prenom.trim(),contrat:f.contrat.trim(),actif:f.actif==='1'});return{cfg:1,action:'Pool : ajout',objet:mat,details:f.nom.trim()+' '+f.prenom.trim()}})),
-  poolEdit:t=>{const p=PL().find(x=>x.mat===t.m);form('Modifier l’agent '+esc(p.mat),AGF(p).slice(1),f=>commit(async ctx=>{const q=(await ctx.cfg()).pool.find(x=>x.mat===t.m);
-    q.nom=f.nom.trim();q.prenom=f.prenom.trim();q.contrat=f.contrat.trim();q.actif=f.actif==='1';return{cfg:1,action:'Pool : modification',objet:q.mat,details:q.nom+' '+q.prenom+(q.actif?'':' (inactif)')}}))},
-  poolTog:t=>commit(async ctx=>{const q=(await ctx.cfg()).pool.find(x=>x.mat===t.m);q.actif=q.actif===false;return{cfg:1,action:q.actif?'Pool : activation':'Pool : désactivation',objet:q.mat,details:q.nom+' '+q.prenom}}),
+  poolAdd:()=>form('Nouvel agent du pool',AGF({}),f=>commit(async ctx=>{const cf=await ctx.pool();cf.pool=cf.pool||[];const mat=f.mat.trim();if(cf.pool.some(p=>nz(p.mat)===nz(mat)))throw new Error('Ce matricule existe déjà.');
+    cf.pool.push({mat,nom:f.nom.trim(),prenom:f.prenom.trim(),contrat:f.contrat.trim(),actif:f.actif==='1'});return{pool:1,action:'Pool : ajout',objet:mat,details:f.nom.trim()+' '+f.prenom.trim()}})),
+  poolEdit:t=>{const p=PL().find(x=>x.mat===t.m);form('Modifier l’agent '+esc(p.mat),AGF(p).slice(1),f=>commit(async ctx=>{const q=(await ctx.pool()).pool.find(x=>x.mat===t.m);
+    q.nom=f.nom.trim();q.prenom=f.prenom.trim();q.contrat=f.contrat.trim();q.actif=f.actif==='1';return{pool:1,action:'Pool : modification',objet:q.mat,details:q.nom+' '+q.prenom+(q.actif?'':' (inactif)')}}))},
+  poolTog:t=>commit(async ctx=>{const q=(await ctx.pool()).pool.find(x=>x.mat===t.m);q.actif=q.actif===false;return{pool:1,action:q.actif?'Pool : activation':'Pool : désactivation',objet:q.mat,details:q.nom+' '+q.prenom}}),
   poolImp:()=>form('Importer des agents (un par ligne)',[{k:'t',l:'Colonnes : matricule ; nom ; prénom ; contrat (séparées par ; ou tabulation). Une ligne d’en-tête est ignorée.',t:'area',r:1,v:''}],f=>commit(async ctx=>{
-    const cf=await ctx.cfg();cf.pool=cf.pool||[];let n=0,sk=0;
+    const cf=await ctx.pool();cf.pool=cf.pool||[];let n=0,sk=0;
     f.t.split(/\r?\n/).forEach(ln=>{const c=ln.split(/[;\t]/).map(x=>x.trim());if(c.length<3||!c[0]||!c[1]||!c[2]||/^matricule/i.test(c[0])||cf.pool.some(p=>nz(p.mat)===nz(c[0]))){if(ln.trim())sk++;return}
       cf.pool.push({mat:c[0],nom:c[1],prenom:c[2],contrat:c[3]||'',actif:true});n++});
-    if(!n)throw new Error('Aucune ligne valide (matricule ; nom ; prénom ; contrat).');return{cfg:1,action:'Pool : import',objet:'agents',details:n+' ajoutés, '+sk+' ignorés'}})),
+    if(!n)throw new Error('Aucune ligne valide (matricule ; nom ; prénom ; contrat).');return{pool:1,action:'Pool : import',objet:'agents',details:n+' ajoutés, '+sk+' ignorés'}})),
   lier:()=>{const g=cur(),v0=g.v;form('Lier à une autre surveillance',[{k:'ref',l:'ID de la garde à lier (ou nom de la personne)',r:1,v:''}],async f=>{
     const t=f.ref.trim().toLowerCase(),c=D.gardes.filter(z=>z.id!==g.id&&((z.numero||'').toLowerCase()===t||(z.personne||'').toLowerCase()===t||((z.numero||'')+' '+(z.personne||'')).toLowerCase()===t));
     if(!c.length)throw new Error('Aucune garde chargée avec cet ID. Si elle est ancienne, utilisez « Tout charger ».');
@@ -451,7 +463,7 @@ const H={
       {k:'du',l:'Du (jour)',t:'date',r:1,v:toL(g.debut_prevu).slice(0,10)},{k:'au',l:'Au (jour, facultatif : plusieurs jours de suite)',t:'date',v:''},
       {k:'h1',l:'Heure de début (vide = horaire du service)',t:'time',v:''},{k:'h2',l:'Heure de fin (vide = horaire du service)',t:'time',v:''}],
     async f=>{const ns=f.agent.split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean);if(!ns.length)throw new Error('Saisissez au moins un nom.');
-      const rs=ns.map(resolveAg),[a,b]=hrs(f.service,f.h1,f.h2),days=[];for(let d=new Date(f.du+'T00:00'),e=new Date((f.au||f.du)+'T00:00');d<=e&&days.length<62;d.setDate(d.getDate()+1))days.push(ymd(d));
+      const rs=[];for(const n of ns)rs.push(await resolveAsk(n));const[a,b]=hrs(f.service,f.h1,f.h2),days=[];for(let d=new Date(f.du+'T00:00'),e=new Date((f.au||f.du)+'T00:00');d<=e&&days.length<62;d.setDate(d.getDate()+1))days.push(ymd(d));
       if(!days.length)throw new Error('Période invalide.');
       const list=[];rs.forEach(r=>days.forEach(dy=>{const[s,e]=mk(dy,a,b);list.push({n:r.agent,mat:r.mat,s,e})}));
       const w=[...new Set(list.flatMap(z=>warns(D,{id:'',nom:z.n,mat:z.mat,debut:z.s,fin:z.e}).map(x=>z.n+' : '+x)))];
@@ -463,7 +475,7 @@ const H={
         list.forEach(z=>sv.aff.push({id:uid(),agent:z.n,mat:z.mat,piquet:f.piquet==='1',debut:z.s,fin:z.e,debut_reel:'',fin_reel:''}));
         return{action:'Affectation agents',objet:oid(x),details:f.service+' · '+rs.map(r=>r.agent).join(', ')+' · '+days[0]+(days.length>1?' → '+days[days.length-1]:'')+(all.length?' · '+all.length+' alerte(s) confirmée(s)':'')}})})},
   editA:t=>{const g=cur(),v0=g.v,s=g.services.find(z=>z.id===t.s),a=s.aff.find(z=>z.id===t.i);
-    form('Modifier l’affectation',af(a,s),async f=>{chkA(f,s,a.id,f.agent.trim());
+    form('Modifier l’affectation',af(a,s),async f=>{const r=await resolveAsk(f.agent);chkA(f,s,a.id,r);f.agent=r.mat||r.agent;
       await upd(g.id,v0,(x,d)=>({action:'Modification affectation',objet:oid(x),details:AN(a.agent)+' — '+apply(x.services.find(z=>z.id===t.s).aff.find(z=>z.id===t.i),f,KA,d)}))})},
   exportG:()=>{const g=cur(),A=g.services.flatMap(s=>s.aff),fin=A.length?ymd(new Date(Math.max(...A.map(a=>T(a.fin)))-6e4)):ymd(new Date());
     form('Exporter les services en PDF',[{k:'du',l:'Du (jour)',t:'date',r:1,v:toL(g.debut_prevu).slice(0,10)},{k:'au',l:'Au (jour)',t:'date',r:1,v:fin},

@@ -1,6 +1,6 @@
 # Suivi des gardes — Documentation
 
-Application interne de suivi des gardes de patients et de personnes détenues · Version 1.1 · 21 octobre 2026
+Application interne de suivi des gardes de patients et de personnes détenues · Version 1.2 · 24 octobre 2026
 
 ## 1. Vue d'ensemble
 
@@ -84,7 +84,7 @@ Un agent peut donc faire le matin le lundi et un autre agent le matin le mardi. 
 
 L'application signale les horaires incohérents et les chevauchements d'un même agent, y compris entre deux gardes, puis demande confirmation. Matin et Après-midi se chevauchent de 15 minutes par conception : un même agent placé sur les deux le même jour déclenche donc un avertissement.
 
-**Agents du pool.** Un agent du pool est retrouvé par son matricule, par son nom et prénom (dans les deux ordres) ou par son seul nom s'il est unique. Il est alors toujours écrit de la même façon (par exemple DUPONT Jean) et son matricule est enregistré dans l'affectation. Si plusieurs agents portent le même nom, l'application demande de préciser. Un agent hors pool reste saisissable librement, mais il n'est ni suivi ni contrôlé. Planifier un agent inactif déclenche une alerte.
+**Agents du pool.** Un agent du pool est retrouvé par son matricule, par son nom et prénom (dans les deux ordres) ou par son seul nom s'il est unique. Il est alors toujours écrit de la même façon (par exemple DUPONT Jean) et son matricule est enregistré dans l'affectation. Si plusieurs agents du pool correspondent à ce qui est saisi (par exemple « Dupont » pour DUPONT Marc, matricule 12345, et DUPONT Thomas, matricule 54321), une fenêtre s'ouvre avec une liste déroulante pour choisir la bonne personne, affichée avec son nom, son prénom et son matricule. Annuler ce choix annule l'enregistrement. La même fenêtre s'ouvre quand on modifie l'agent d'une affectation. Un agent hors pool reste saisissable librement, mais il n'est ni suivi ni contrôlé. Planifier un agent inactif déclenche une alerte.
 
 **Contrôle LTR.** Pour les agents du pool, l'application vérifie à l'entrée en planification :
 
@@ -150,7 +150,7 @@ L'heure (avec les secondes) et la date s'affichent en grand en haut à droite de
 Accessible uniquement au profil Administrateur après connexion.
 - **Types de gardes** : couleur modifiable, ordre modifiable avec les flèches ↑ ↓ (il détermine le tri), ajout d'un type. Un nouveau type crée son dossier `AAAA/Type` pour l'année en cours.
 - **Types de services** : couleur modifiable, ajout d'un service avec ses horaires facultatifs.
-- **Pool d'agents** : liste avec recherche (matricule, nom, prénom, contrat, statut), ajout, modification, activation ou désactivation, et import d'une liste collée (une ligne par agent : matricule ; nom ; prénom ; contrat). Pour chaque agent, le tableau affiche les services, les heures, les piquets et les alertes LTR sur les mois chargés. Renommer un agent ne modifie pas les plannings déjà saisis.
+- **Pool d'agents** (enregistré dans `agents.json`) : liste avec recherche (matricule, nom, prénom, contrat, statut), ajout, modification, activation ou désactivation, et import d'une liste collée (une ligne par agent : matricule ; nom ; prénom ; contrat). Pour chaque agent, le tableau affiche les services, les heures, les piquets et les alertes LTR sur les mois chargés. Renommer un agent ne modifie pas les plannings déjà saisis.
 - **Contrôle LTR** : les sept seuils (jours consécutifs, repos minimum, repos après la série maximale de jours, travail maximum et plage de jour, travail maximum et plage de nuit).
 - **Affichage** : six réglages appliqués à tous les postes (police générale, hauteur des barres de garde, hauteur des barres de service, largeur de la colonne des libellés, largeur du panneau latéral, taille de l'horloge), avec un bouton pour rétablir les valeurs par défaut.
 - **Comptes** : changer son mot de passe, ajouter un compte administrateur.
@@ -170,7 +170,8 @@ Accessible uniquement au profil Administrateur après connexion.
 
 ### 7.1 Organisation du dossier partagé
 
-- `config.json` : types de gardes (nom, couleur, dossier), types de services, pool d'agents, règles LTR, réglages d'affichage, et journal des changements de configuration et des suppressions de gardes.
+- `config.json` : types de gardes (nom, couleur, dossier), types de services, règles LTR, réglages d'affichage, et journal des changements de configuration et des suppressions de gardes.
+- `agents.json` : le pool d'agents (matricule, nom, prénom, contrat, actif ou inactif) et le journal de ses modifications. Au premier démarrage avec cette version, un pool saisi auparavant dans `config.json` est repris automatiquement dans ce fichier.
 - `admin.json` : comptes administrateur. Les mots de passe y sont hachés (PBKDF2-SHA256, sel aléatoire), jamais en clair.
 - `AAAA/Type/Mois/` : une surveillance = un fichier JSON, par exemple `2026/Patient/Janvier/2026_A01_Dupont_Actif.json`. Le mois est écrit en français (Janvier à Décembre). Une garde reste dans le mois de sa date de début. Les dossiers de type s'appellent `Patient`, `Detenu`, ou le nom d'un type créé dans l'administration.
 - Nom du fichier : `AAAA_Référence_Nom_Statut.json`, ou `AAAA_Nom_Statut.json` sans référence. Le statut vaut `Actif` (garde en cours), `Fini` (garde clôturée mais pas traitée) ou `Traite` (garde finie et traitée). Le fichier est renommé automatiquement à chaque changement de statut, de référence ou de nom ; si deux fichiers auraient le même nom, un suffixe de 4 caractères est ajouté.
@@ -199,7 +200,7 @@ Pour rester rapide, l'application charge le mois courant et le mois précédent 
 ### 7.5 Restaurer une sauvegarde
 
 1. Fermer l'application sur les deux postes.
-2. Dans `sauvegardes/`, repérer la copie voulue. Son nom est `horodatage_AAAA_Type_Mois_NomDuFichier.json`, par exemple `2026-10-18T19-50-12-345Z_2026_Patient_Octobre_2026_A01_Dupont_Actif.json`. Pour la configuration, le nom se termine par `_config.json` ; pour une garde supprimée, par `_supprimee.json`.
+2. Dans `sauvegardes/`, repérer la copie voulue. Son nom est `horodatage_AAAA_Type_Mois_NomDuFichier.json`, par exemple `2026-10-18T19-50-12-345Z_2026_Patient_Octobre_2026_A01_Dupont_Actif.json`. Pour la configuration, le nom se termine par `_config.json` ; pour le pool d'agents, par `_agents.json` ; pour une garde supprimée, par `_supprimee.json`.
 3. La copier dans `AAAA/Type/Mois/` (ici `2026/Patient/Octobre/`) sous son nom d'origine (`2026_A01_Dupont_Actif.json`), après avoir supprimé de ce dossier la version plus récente de la même garde si elle existe. Le statut inscrit dans le nom doit correspondre au contenu du fichier.
 4. Vérifier que le fichier s'ouvre dans un éditeur de texte et que son contenu est du JSON valide, puis rouvrir l'application.
 
@@ -222,7 +223,7 @@ Pour rester rapide, l'application charge le mois courant et le mois précédent 
 - **Une garde est introuvable** : son mois n'est pas chargé. Utiliser un filtre de dates ou « Tout charger ».
 - **« Aucun service planifié sur cette période »** : le PDF n'a aucune affectation entre les deux jours choisis. Élargir la période.
 - **Échec de sauvegarde dans l'en-tête** : l'enregistrement a réussi, mais la copie datée a échoué. Vérifier l'espace disque et les droits sur `sauvegardes/`.
-- **« Plusieurs agents du pool correspondent »** : saisir le prénom ou le matricule pour préciser l'agent.
+- **Fenêtre « Plusieurs agents correspondent »** : choisir la bonne personne dans la liste. Si deux agents ont exactement les mêmes nom et prénom, le matricule les distingue dans la liste.
 - **Pas d'alerte LTR pour un agent** : il est hors pool (nom libre), ou son planning d'un autre mois n'est pas chargé.
 - **Le nom d'un fichier de garde ne correspond plus à son statut** (renommage manuel) : l'application se fie au contenu du fichier et le renomme au prochain enregistrement. Éviter de renommer ou de déplacer les fichiers à la main.
 
@@ -232,7 +233,8 @@ Pour rester rapide, l'application charge le mois courant et le mois précédent 
 
 Version de schéma : 1 (vérifiée à chaque lecture).
 
-- **`config.json`** : `types` (liste de nom, couleur, dossier ; l'ordre de la liste est l'ordre de tri), `services` (nom, couleur, début, fin ; la fin peut valoir `24:00`), `pool` (`mat`, `nom`, `prenom`, `contrat`, `actif`), `ltr` (`jours`, `repos`, `sem`, `jour`, `pjour`, `nuit`, `pnuit` ; facultatif), `affichage` (facultatif), `audit`, `rev`.
+- **`config.json`** : `types` (liste de nom, couleur, dossier ; l'ordre de la liste est l'ordre de tri), `services` (nom, couleur, début, fin ; la fin peut valoir `24:00`), `ltr` (`jours`, `repos`, `sem`, `jour`, `pjour`, `nuit`, `pnuit` ; facultatif), `affichage` (facultatif), `audit`, `rev`.
+- **`agents.json`** : `pool` (`mat`, `nom`, `prenom`, `contrat`, `actif`), `audit`, `rev`.
 - **Fichier de garde** (un par surveillance) : la garde elle-même, `schema_version` et son journal `audit`.
 - **Garde** : `id`, `numero` (la référence, éventuellement vide), `personne`, `type`, `localisation`, `provenance`, `tel_service`, `radio_service`, `risques`, `statut` (`en_cours`, `a_traiter`, `traitee`), `debut_prevu`, `debut_reel`, `fin_prevue`, `fin_reel`, `cree_le`, `cloture_le`, `traite_le`, `traite_par`, `v` (version de la garde), `liens` et `services`.
 - **Lien** : `id` de la garde liée et `numero` (repère de secours si cette garde n'est pas chargée).

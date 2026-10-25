@@ -19,7 +19,7 @@ Les données sont des fichiers JSON dans un dossier partagé du réseau (2 utili
 
 ## Données : à ne jamais publier
 
-Le dépôt contient uniquement le code. Les fichiers de données (`config.json`, `admin.json`, dossiers `AAAA/Type/Mois`, `sauvegardes/`) contiennent des informations sensibles et sont exclus par `.gitignore`. Ne choisissez jamais le dossier du dépôt comme dossier de données, et gardez ce dépôt **privé**.
+Le dépôt contient uniquement le code. Les fichiers de données (`config.json`, `agents.json`, `admin.json`, dossiers `AAAA/Type/Mois`, `sauvegardes/`) contiennent des informations sensibles et sont exclus par `.gitignore`. Ne choisissez jamais le dossier du dépôt comme dossier de données, et gardez ce dépôt **privé**.
 
 ## Fonctions principales
 
