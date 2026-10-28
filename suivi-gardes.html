@@ -62,6 +62,7 @@ dialog label{display:block;margin:7px 0}dialog input,dialog select,dialog textar
   <span style="flex:1"></span>
   <label class="m">Utilisateur <input id="user" size="14" placeholder="Votre nom"></label>
   <label class="m">Profil <select id="role"><option>Administrateur</option><option>Opérateur</option><option>Consultation</option></select></label>
+  <button class="s" id="expAg" data-a="expAg" title="Liste des agents ayant travaillé sur une période, en PDF">Exporter les agents (PDF)</button>
   <div id="clock"><b id="clk">--:--:--</b><span class="m" id="cdate"></span></div>
 </header>
 <nav id="nav">
@@ -388,6 +389,9 @@ function pdfBytes(g,du,au,reels){
   txt(M,y-12,`Total des heures prestées sur l’ensemble de la garde : ${hd(tot)}`,12,1);
   txt(M,y-30,`${all.length} affectations · ${new Set(all.map(a=>(a.agent||'').toLowerCase())).size} agents · dont période exportée : ${hd(per)} · piquets avec droit à la rémunération : ${all.filter(isPq).length}`,9);
   pages.forEach((o,i)=>{const f=(t,x)=>o.push(`BT /F1 8 Tf ${x} 20 Td (${pe(t)}) Tj ET`);f('Suivi des gardes — document confidentiel',M);f(`Page ${i+1}/${pages.length}`,W-M-48)});
+  return pdfAssemble(pages,W,H);
+}
+function pdfAssemble(pages,W,H){
   const objs=[],add=x=>objs.push(x),kids=[];
   add('<< /Type /Catalog /Pages 2 0 R >>');add('');add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
   pages.forEach(o=>{const st=o.join('\n'),pi=objs.length+1;kids.push(pi+' 0 R');
@@ -397,8 +401,47 @@ function pdfBytes(g,du,au,reels){
   const xr=out.length;out+=`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`+off.map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')+`trailer\n<< /Size ${objs.length+1} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF\n`;
   return Uint8Array.from(out,c=>c.charCodeAt(0));
 }
-function pdfExport(g,du,au,reels){const u=URL.createObjectURL(new Blob([pdfBytes(g,du,au,reels)],{type:'application/pdf'})),a=document.createElement('a');
-  a.href=u;a.download='services_'+slug(g.numero||ref(g))+'_'+du+'_'+au+'.pdf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),8000)}
+function pdfSave(b,name){const u=URL.createObjectURL(new Blob([b],{type:'application/pdf'})),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),8000)}
+function pdfExport(g,du,au,reels){pdfSave(pdfBytes(g,du,au,reels),'services_'+slug(g.numero||ref(g))+'_'+du+'_'+au+'.pdf')}
+/* Liste des agents ayant travaillé sur une période, toutes gardes confondues (pour la planification) */
+function pdfAgents(du,au,reels,tri){
+  const a0=+new Date(du+'T00:00'),a1=+new Date(au+'T00:00')+864e5,rows=[];
+  D.gardes.forEach(g=>g.services.forEach(v=>{if(v.type==='Pause')return;v.aff.forEach(a=>{if(T(a.fin)>a0&&T(a.debut)<a1)rows.push({g,v:v.type,a})})}));
+  if(!rows.length)throw new Error('Aucun agent n’a travaillé sur cette période.');
+  const nm=z=>(z.a.agent||'').toLowerCase();
+  rows.sort(tri==='agent'?(p,q)=>nm(p).localeCompare(nm(q))||T(p.a.debut)-T(q.a.debut):(p,q)=>T(p.a.debut)-T(q.a.debut)||nm(p).localeCompare(nm(q)));
+  const rg=(a,b)=>{const nd=ymd(new Date(T(b)))>ymd(new Date(T(a)));return tm(a)+'–'+(nd&&tm(b)==='00:00'?'24:00':tm(b)+(nd?' (+1)':''))};
+  const dl=i=>['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'][new Date(T(i)).getDay()]+' '+fmt(i).slice(0,10);
+  const mins=a=>{const r=a.debut_reel&&a.fin_reel;return(T(r?a.fin_reel:a.fin)-T(r?a.debut_reel:a.debut))/6e4};
+  const W=842,H=595,M=36,RH=16,pages=[],now=new Date().toISOString();
+  const CW=reels?[['N° garde',56],['Personne surveillée',126],['Agent',164],['Matricule',56],['Date',80],['Service',64],['Horaire prévu',90],['Horaire réel',90],['Piquet',40]]:[['N° garde',56],['Personne surveillée',170],['Agent',210],['Matricule',56],['Date',80],['Service',64],['Horaire prévu',90],['Piquet',40]];
+  const ag=new Set(rows.map(z=>(z.a.mat||z.a.agent||'').toLowerCase())).size,gd=new Set(rows.map(z=>z.g.id)).size,d1=fmt(du+'T00:00').slice(0,10),d2=fmt(au+'T00:00').slice(0,10);
+  let ops,y;
+  const txt=(x,yy,t,z=9,b=0)=>ops.push(`BT /F${b?2:1} ${z} Tf ${x} ${yy} Td (${pe(t)}) Tj ET`);
+  const fit=(t,w,z,b)=>{t=String(t??'');if(tw(t,z,b)<=w)return t;while(t.length>1&&tw(t+'…',z,b)>w)t=t.slice(0,-1);return t+'…'};
+  const row=(cells,h,sep)=>{if(h)ops.push(`0.88 0.91 0.96 rg ${M} ${y-RH} ${W-2*M} ${RH} re f 0 g`);
+    if(sep)ops.push(`0.9 w ${M} ${y} m ${W-M} ${y} l S`);
+    let x=M;cells.forEach((c,i)=>{txt(x+3,y-RH+5,fit(c,CW[i][1]-6,9,h),9,h);x+=CW[i][1]});
+    ops.push(`0.25 w ${M} ${y-RH} m ${W-M} ${y-RH} l S`);y-=RH};
+  const newPage=()=>{ops=['0.6 G'];pages.push(ops);y=H-M;
+    if(pages.length===1){txt(M,y-14,'Agents ayant travaillé du '+d1+' au '+d2,15,1);
+      txt(M,y-32,`${rows.length} affectations · ${ag} agents · ${gd} gardes · toutes les gardes, quel que soit leur statut · tri ${tri==='agent'?'par agent':'chronologique'}`,10);
+      txt(M,y-47,`Édité le ${fmt(now)} par ${S.user||'—'}`,10);y-=66}
+    else{txt(M,y-12,'Agents ayant travaillé du '+d1+' au '+d2+' (suite)',10,1);y-=26}
+    row(CW.map(c=>c[0]),1)};
+  newPage();let last='';
+  rows.forEach(z=>{if(y-RH<M+20)newPage();const k=tri==='agent'?nm(z):ymd(new Date(T(z.a.debut))),sep=last!==''&&k!==last;last=k;
+    row([z.g.numero||'—',z.g.personne||'—',z.a.agent||'—',z.a.mat||'',dl(z.a.debut),z.v,rg(z.a.debut,z.a.fin),...(reels?[z.a.debut_reel&&z.a.fin_reel?rg(z.a.debut_reel,z.a.fin_reel):'—']:[]),isPq(z.a)?'Oui':''],0,sep)});
+  const tot=rows.reduce((n,z)=>n+mins(z.a),0);
+  if(y-52<M+20)newPage();y-=12;
+  txt(M,y-12,`Total des heures prestées sur la période : ${dh(tot)}`,12,1);
+  txt(M,y-30,`${rows.length} affectations · ${ag} agents · piquets avec droit à la rémunération : ${rows.filter(z=>isPq(z.a)).length}`,9);
+  pages.forEach((o,i)=>{const f=(t,x)=>o.push(`BT /F1 8 Tf ${x} 20 Td (${pe(t)}) Tj ET`);f('Suivi des gardes — document confidentiel',M);f(`Page ${i+1}/${pages.length}`,W-M-48)});
+  return pdfAssemble(pages,W,H);
+}
+async function ensureMonths(du,au){let y=+du.slice(0,4),m=+du.slice(5,7)-1;const y1=+au.slice(0,4),m1=+au.slice(5,7);if(m<1){m=12;y--}
+  for(let i=0;i<60;i++){C.types.forEach(t=>LF.add(y+'/'+typeDir(t.nom)+'/'+MONTHS[m-1]));if(y===y1&&m===m1)break;if(++m>12){m=1;y++}}
+  if(await loadWindow())rebuild()}
 
 /* ===== Actions ===== */
 const cur=()=>G(D,S.sel);
@@ -486,6 +529,13 @@ const H={
       catch(e){showErr(new Error('PDF créé, mais l’export n’a pas pu être journalisé : '+e.message))}})},
   mvT:t=>commit(async ctx=>{const cf=await ctx.cfg(),i=cf.types.findIndex(x=>x.nom===t.n),j=i+ +t.d;if(i<0||j<0||j>=cf.types.length)throw new Error('Déplacement impossible.');
     [cf.types[i],cf.types[j]]=[cf.types[j],cf.types[i]];return{cfg:1,action:'Ordre des types de garde',objet:t.n,details:'position '+(j+1)}}),
+  expAg:()=>{const t=ymd(new Date()),d0=ymd(new Date(Date.now()-3*864e5));
+    form('Exporter les agents en PDF',[{k:'du',l:'Du (jour)',t:'date',r:1,v:d0},{k:'au',l:'Au (jour)',t:'date',r:1,v:t},
+      {k:'tri',l:'Tri',o:[['date','Chronologique'],['agent','Par agent']],v:'date'},{k:'reels',l:'Horaires',o:[['1','Prévus et réels'],['0','Prévus seulement']],v:'1'}],async f=>{
+      if(f.au<f.du)throw new Error('Le jour de fin doit être postérieur ou égal au jour de début.');
+      await ensureMonths(f.du,f.au);pdfSave(pdfAgents(f.du,f.au,f.reels==='1',f.tri),'agents_'+f.du+'_'+f.au+'.pdf');
+      try{await commit(async ctx=>({cfg:1,action:'Export PDF des agents',objet:'période',details:'du '+f.du+' au '+f.au}))}
+      catch(e){showErr(new Error('PDF créé, mais l’export n’a pas pu être journalisé : '+e.message))}})},
   addT:()=>form('Nouveau type de garde',[{k:'nom',l:'Nom du type',r:1,v:''},{k:'couleur',l:'Couleur',t:'color',v:'#d9622b'}],f=>commit(async ctx=>{
     const cf=await ctx.cfg(),n=f.nom.trim();if(cf.types.some(t=>t.nom.toLowerCase()===n.toLowerCase()))throw new Error('Ce type existe déjà.');
     const t={nom:n,couleur:f.couleur,dossier:capSlug(n)};if(cf.types.some(x=>x.dossier===t.dossier))t.dossier+='-'+cf.types.length;cf.types.push(t);
@@ -632,7 +682,7 @@ function detail(){
   <h3>Historique des modifications</h3>${au.map(a=>`<div class="m">${fmt(a.le)} · ${esc(a.user)} · ${esc(a.action)}${a.details?' — '+esc(a.details):''}</div>`).join('')||'<div class="m">Aucun événement.</div>'}</div>`;
 }
 function render(){
-  const ap=$('app'),pb=$('pan');pb.style.display=D?'':'none';ap.classList.toggle('nopan',!S.pan);pb.textContent=S.pan?'»':'«';
+  const ap=$('app'),pb=$('pan');pb.style.display=D?'':'none';$('expAg').style.display=D&&rw()?'':'none';ap.classList.toggle('nopan',!S.pan);pb.textContent=S.pan?'»':'«';
   pb.setAttribute('aria-expanded',String(S.pan));pb.setAttribute('aria-label',S.pan?'Masquer le panneau de détail':'Afficher le panneau de détail');
   if(!D){ap.innerHTML=`<div class="c"><h2>Connexion au dossier de données</h2><p>Choisissez le dossier partagé qui contient (ou contiendra) <code>${FILE}</code>. Les copies datées sont écrites dans <code>${BK}</code>.</p>
     <p><button data-a="pick"${'showDirectoryPicker'in window?'':' disabled'}>Choisir le dossier partagé</button> <button class="s" data-a="resume">Reprendre le dossier précédent</button></p>

@@ -1,6 +1,6 @@
 # Suivi des gardes — Documentation
 
-Application interne de suivi des gardes de patients et de personnes détenues · Version 1.2 · 24 octobre 2026
+Application interne de suivi des gardes de patients et de personnes détenues · Version 1.3 · 28 octobre 2026
 
 ## 1. Vue d'ensemble
 
@@ -144,6 +144,12 @@ La fiche s'affiche dans un panneau à droite. La languette au bord droit de l'é
 ### 4.11 Horloge et affichage
 
 L'heure (avec les secondes) et la date s'affichent en grand en haut à droite de la fenêtre, et une petite icône aux trois barres de Gantt sert de favicon. Les tailles de police et des éléments se règlent dans l'Administration (voir la section 5).
+
+### 4.12 Export PDF des agents sur une période
+
+Bouton **Exporter les agents (PDF)** en haut de la fenêtre (Opérateur et Administrateur). Une fenêtre demande le jour de début et le jour de fin, le tri (chronologique ou par agent) et les horaires (prévus et réels, ou prévus seulement).
+
+Le PDF, en A4 paysage, liste toutes les affectations de toutes les gardes qui chevauchent la période, quel que soit le statut des gardes : numéro de garde, personne surveillée, agent, matricule, date, service, horaire prévu, horaire réel et piquet. Il se termine par le total des heures prestées. Il sert à planifier les agents dans le logiciel de planification sans attendre les retours de carnet de service, par exemple pour toutes les gardes du vendredi au lundi. L'application charge au besoin les mois de la période et le mois précédent. Les services nommés « Pause » ne sont pas listés. Le fichier est téléchargé sous la forme `agents_du_au.pdf` et l'export est inscrit dans le journal d'audit.
 
 ## 5. Administration
 
