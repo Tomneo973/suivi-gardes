@@ -1,6 +1,6 @@
 # Suivi des gardes — Documentation
 
-Application interne de suivi des gardes de patients et de personnes détenues · Version 1.3 · 28 octobre 2026
+Application interne de suivi des gardes de patients et de personnes détenues · Version 1.5 · 29 octobre 2026
 
 ## 1. Vue d'ensemble
 
@@ -36,8 +36,8 @@ La zone d'en-tête affiche en permanence l'état de la connexion, l'heure de la 
 
 ## 3. Profils et droits
 
-- **Administrateur** (connexion obligatoire) : tous les droits, dont la console d'administration (pool d'agents, règles LTR, affichage, types), la modification et la suppression des gardes traitées, et leur réouverture avec justification.
-- **Opérateur** : crée et modifie les gardes en cours et à traiter, les lie entre elles, affecte les agents (garde en cours uniquement), clôture, traite, supprime une garde non traitée, exporte en PDF.
+- **Administrateur** (connexion obligatoire) : tous les droits, dont la console d'administration (pool d'agents, règles LTR, affichage, types), la modification et la suppression des gardes traitées, et leur réouverture avec justification, et gère la liste des cadres de piquet.
+- **Opérateur** : crée et modifie les gardes en cours et à traiter, les lie entre elles, affecte les agents (garde en cours uniquement), clôture, traite, supprime une garde non traitée, exporte en PDF, renseigne le planning des piquets d'encadrement.
 - **Consultation** : lecture seule. La garde apparaît sous sa référence (pas de nom), les risques et la provenance sont masqués, pas de recherche par nom, pas d'export PDF.
 
 Le nom saisi dans « Utilisateur » est déclaratif : ce n'est pas une authentification. Seul le profil Administrateur est protégé par mot de passe.
@@ -147,16 +147,32 @@ L'heure (avec les secondes) et la date s'affichent en grand en haut à droite de
 
 ### 4.12 Export PDF des agents sur une période
 
-Bouton **Exporter les agents (PDF)** en haut de la fenêtre (Opérateur et Administrateur). Une fenêtre demande le jour de début et le jour de fin, le tri (chronologique ou par agent) et les horaires (prévus et réels, ou prévus seulement).
+Bouton **Exporter les agents (PDF)** en haut de la fenêtre (Opérateur et Administrateur). Une fenêtre demande le jour de début et le jour de fin, le tri (chronologique, par numéro de garde ou par agent) et les horaires (prévus et réels, ou prévus seulement).
 
-Le PDF, en A4 paysage, liste toutes les affectations de toutes les gardes qui chevauchent la période, quel que soit le statut des gardes : numéro de garde, personne surveillée, agent, matricule, date, service, horaire prévu, horaire réel et piquet. Il se termine par le total des heures prestées. Il sert à planifier les agents dans le logiciel de planification sans attendre les retours de carnet de service, par exemple pour toutes les gardes du vendredi au lundi. L'application charge au besoin les mois de la période et le mois précédent. Les services nommés « Pause » ne sont pas listés. Le fichier est téléchargé sous la forme `agents_du_au.pdf` et l'export est inscrit dans le journal d'audit.
+Le PDF, en A4 paysage, liste toutes les affectations de toutes les gardes qui chevauchent la période, quel que soit le statut des gardes : numéro de garde, personne surveillée, agent, matricule, date, service, horaire prévu, horaire réel et piquet. Il se termine par le total des heures prestées. Il sert à planifier les agents dans le logiciel de planification sans attendre les retours de carnet de service, par exemple pour toutes les gardes du vendredi au lundi. L'application charge au besoin les mois de la période et le mois précédent. Tous les types de service sont pris en compte, y compris « Pause ». Tris : chronologique (début de chaque service, puis numéro de garde quand plusieurs services commencent en même temps) ; par numéro de garde (tous les services d'une garde dans l'ordre chronologique sur la période, puis la garde suivante) ; par agent. Le fichier est téléchargé sous la forme `agents_du_au.pdf` et l'export est inscrit dans le journal d'audit.
+
+### 4.13 Piquets d'encadrement
+
+Les piquets d'encadrement sont les cadres que l'on peut joindre en dehors des horaires de bureau. Ils remplacent le fichier Excel (une croix par jour et par cadre). Trois pages y sont consacrées.
+
+- **Piquet du jour** : le cadre de piquet aujourd'hui, avec son numéro de téléphone, les sept prochains jours et, s'il y en a, les jours du mois en cours sans piquet. Visible pour tous les profils.
+- **Planning piquets** : une grille cadres par jours pour un mois (flèches et sélecteur de mois). Un clic sur une case attribue le piquet d'un jour à un cadre, un second clic le retire ; un jour n'a qu'un seul cadre. Le bouton **Attribuer une période** attribue un cadre sur plusieurs jours, en conservant ou en remplaçant les jours déjà attribués. Modifiable par les profils Opérateur et Administrateur, en lecture seule pour Consultation.
+- **Cadres de piquet** : la liste restreinte des cadres qui peuvent être de piquet (nom, prénom, téléphone, actif ou inactif). Seuls les cadres actifs peuvent être placés de piquet. Modifiable par l'administrateur uniquement.
+
+Un piquet doit être défini pour chaque jour. Dès qu'un jour du mois en cours n'a pas de piquet, un bandeau d'alerte s'affiche sous le menu, avec les jours concernés, et un compteur apparaît sur l'onglet « Piquet du jour ». Chaque changement est inscrit dans le journal d'audit. Les données sont dans `cadres.json` et dans un fichier par mois (`Piquets/AAAA/Mois.json`).
+
+### 4.14 Disponibilités théoriques et capacités
+
+**Disponibilités.** Dans l'Administration, le bouton **Dispo.** d'un agent du pool ouvre une grille : les 7 jours de la semaine en colonnes, les services en lignes (Matin, Après-midi, Nuit et les services ajoutés, sauf « Pause »). On coche les créneaux où l'agent est disponible en théorie ; « Tous les jours » coche une ligne, « Tout cocher » et « Tout décocher » agissent sur toute la grille. La colonne « Disponibilités » du pool indique le nombre de créneaux cochés. Les disponibilités sont enregistrées dans `agents.json` et réservées à l'administrateur.
+
+**Page Capacités** (profils Opérateur et Administrateur). Pour la semaine choisie (flèches, sélecteur de date, « Cette semaine »), un tableau croise les services et les 7 jours. Chaque case affiche **agents planifiés / agents disponibles en théorie**, calculés sur les agents actifs du pool : vert quand il reste de la marge, orange quand tous les agents disponibles sont planifiés, rouge quand il y a plus d'agents planifiés que de disponibles, gris quand rien n'est prévu. Une ligne de total donne le cumul des créneaux de chaque jour. Un clic sur une case liste les agents disponibles (planifiés ou non) et les agents planifiés hors disponibilités déclarées, y compris les agents hors pool. Un service est compté à la date de son début : la nuit de 23:45 compte pour le jour où elle commence. L'application charge au besoin les mois de la semaine.
 
 ## 5. Administration
 
 Accessible uniquement au profil Administrateur après connexion.
 - **Types de gardes** : couleur modifiable, ordre modifiable avec les flèches ↑ ↓ (il détermine le tri), ajout d'un type. Un nouveau type crée son dossier `AAAA/Type` pour l'année en cours.
 - **Types de services** : couleur modifiable, ajout d'un service avec ses horaires facultatifs.
-- **Pool d'agents** (enregistré dans `agents.json`) : liste avec recherche (matricule, nom, prénom, contrat, statut), ajout, modification, activation ou désactivation, et import d'une liste collée (une ligne par agent : matricule ; nom ; prénom ; contrat). Pour chaque agent, le tableau affiche les services, les heures, les piquets et les alertes LTR sur les mois chargés. Renommer un agent ne modifie pas les plannings déjà saisis.
+- **Pool d'agents** (enregistré dans `agents.json`) : liste avec recherche (matricule, nom, prénom, contrat, statut), ajout, modification, activation ou désactivation, suppression (les plannings déjà saisis gardent le nom et le matricule de l'agent), saisie de ses disponibilités théoriques et import d'une liste collée (une ligne par agent : matricule ; nom ; prénom ; contrat). Pour chaque agent, le tableau affiche les services, les heures, les piquets et les alertes LTR sur les mois chargés. Renommer un agent ne modifie pas les plannings déjà saisis.
 - **Contrôle LTR** : les sept seuils (jours consécutifs, repos minimum, repos après la série maximale de jours, travail maximum et plage de jour, travail maximum et plage de nuit).
 - **Affichage** : six réglages appliqués à tous les postes (police générale, hauteur des barres de garde, hauteur des barres de service, largeur de la colonne des libellés, largeur du panneau latéral, taille de l'horloge), avec un bouton pour rétablir les valeurs par défaut.
 - **Comptes** : changer son mot de passe, ajouter un compte administrateur.
@@ -182,6 +198,8 @@ Accessible uniquement au profil Administrateur après connexion.
 - `AAAA/Type/Mois/` : une surveillance = un fichier JSON, par exemple `2026/Patient/Janvier/2026_A01_Dupont_Actif.json`. Le mois est écrit en français (Janvier à Décembre). Une garde reste dans le mois de sa date de début. Les dossiers de type s'appellent `Patient`, `Detenu`, ou le nom d'un type créé dans l'administration.
 - Nom du fichier : `AAAA_Référence_Nom_Statut.json`, ou `AAAA_Nom_Statut.json` sans référence. Le statut vaut `Actif` (garde en cours), `Fini` (garde clôturée mais pas traitée) ou `Traite` (garde finie et traitée). Le fichier est renommé automatiquement à chaque changement de statut, de référence ou de nom ; si deux fichiers auraient le même nom, un suffixe de 4 caractères est ajouté.
 - `sauvegardes/` : copies datées, une par fichier enregistré, 300 conservées.
+- `cadres.json` : la liste des cadres pouvant être de piquet d'encadrement (nom, prénom, téléphone, actif ou inactif) et le journal de ses modifications.
+- `Piquets/AAAA/Mois.json` : le planning des piquets d'encadrement, un fichier par mois (par exemple `Piquets/2026/Octobre.json`), avec un cadre par jour.
 - `gardes.verrou` : verrou temporaire d'écriture, présent seulement pendant un enregistrement.
 
 ### 7.2 Comment se passe un enregistrement
@@ -206,7 +224,7 @@ Pour rester rapide, l'application charge le mois courant et le mois précédent 
 ### 7.5 Restaurer une sauvegarde
 
 1. Fermer l'application sur les deux postes.
-2. Dans `sauvegardes/`, repérer la copie voulue. Son nom est `horodatage_AAAA_Type_Mois_NomDuFichier.json`, par exemple `2026-10-18T19-50-12-345Z_2026_Patient_Octobre_2026_A01_Dupont_Actif.json`. Pour la configuration, le nom se termine par `_config.json` ; pour le pool d'agents, par `_agents.json` ; pour une garde supprimée, par `_supprimee.json`.
+2. Dans `sauvegardes/`, repérer la copie voulue. Son nom est `horodatage_AAAA_Type_Mois_NomDuFichier.json`, par exemple `2026-10-18T19-50-12-345Z_2026_Patient_Octobre_2026_A01_Dupont_Actif.json`. Pour la configuration, le nom se termine par `_config.json` ; pour le pool d'agents, par `_agents.json` ; pour les cadres, par `_cadres.json` ; pour un planning de piquets, par `Piquets_AAAA_Mois.json` ; pour une garde supprimée, par `_supprimee.json`.
 3. La copier dans `AAAA/Type/Mois/` (ici `2026/Patient/Octobre/`) sous son nom d'origine (`2026_A01_Dupont_Actif.json`), après avoir supprimé de ce dossier la version plus récente de la même garde si elle existe. Le statut inscrit dans le nom doit correspondre au contenu du fichier.
 4. Vérifier que le fichier s'ouvre dans un éditeur de texte et que son contenu est du JSON valide, puis rouvrir l'application.
 
@@ -240,7 +258,9 @@ Pour rester rapide, l'application charge le mois courant et le mois précédent 
 Version de schéma : 1 (vérifiée à chaque lecture).
 
 - **`config.json`** : `types` (liste de nom, couleur, dossier ; l'ordre de la liste est l'ordre de tri), `services` (nom, couleur, début, fin ; la fin peut valoir `24:00`), `ltr` (`jours`, `repos`, `sem`, `jour`, `pjour`, `nuit`, `pnuit` ; facultatif), `affichage` (facultatif), `audit`, `rev`.
-- **`agents.json`** : `pool` (`mat`, `nom`, `prenom`, `contrat`, `actif`), `audit`, `rev`.
+- **`agents.json`** : `pool` (`mat`, `nom`, `prenom`, `contrat`, `actif`, `dispo` : jours 1 à 7 du lundi au dimanche, avec la liste des services), `audit`, `rev`.
+- **`cadres.json`** : `cadres` (`id`, `nom`, `prenom`, `tel`, `actif`), `audit`, `rev`.
+- **Fichier de piquets** (`Piquets/AAAA/Mois.json`) : `mois`, `jours` (clé `AAAA-MM-JJ`, valeur : `id` et `nom` du cadre), `audit`, `rev`.
 - **Fichier de garde** (un par surveillance) : la garde elle-même, `schema_version` et son journal `audit`.
 - **Garde** : `id`, `numero` (la référence, éventuellement vide), `personne`, `type`, `localisation`, `provenance`, `tel_service`, `radio_service`, `risques`, `statut` (`en_cours`, `a_traiter`, `traitee`), `debut_prevu`, `debut_reel`, `fin_prevue`, `fin_reel`, `cree_le`, `cloture_le`, `traite_le`, `traite_par`, `v` (version de la garde), `liens` et `services`.
 - **Lien** : `id` de la garde liée et `numero` (repère de secours si cette garde n'est pas chargée).

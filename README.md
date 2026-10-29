@@ -19,7 +19,7 @@ Les données sont des fichiers JSON dans un dossier partagé du réseau (2 utili
 
 ## Données : à ne jamais publier
 
-Le dépôt contient uniquement le code. Les fichiers de données (`config.json`, `agents.json`, `admin.json`, dossiers `AAAA/Type/Mois`, `sauvegardes/`) contiennent des informations sensibles et sont exclus par `.gitignore`. Ne choisissez jamais le dossier du dépôt comme dossier de données, et gardez ce dépôt **privé**.
+Le dépôt contient uniquement le code. Les fichiers de données (`config.json`, `agents.json`, `cadres.json`, `Piquets/`, `admin.json`, dossiers `AAAA/Type/Mois`, `sauvegardes/`) contiennent des informations sensibles et sont exclus par `.gitignore`. Ne choisissez jamais le dossier du dépôt comme dossier de données, et gardez ce dépôt **privé**.
 
 ## Fonctions principales
 
@@ -28,3 +28,4 @@ Le dépôt contient uniquement le code. Les fichiers de données (`config.json`,
 - Export PDF paysage des services d'une garde sur une période, avec total des heures prestées.
 - Une surveillance = un fichier JSON, rangé dans `AAAA/Type/Mois/` et nommé `AAAA_Axx_Nom_Statut.json` (Actif, Fini, Traite). Copies datées, détection des conflits, journal d'audit.
 - Pool d'agents, contrôle LTR, référence semi-automatique, liens entre surveillances.
+- Piquets d'encadrement : cadres autorisés, planning par jour, piquet du jour, alerte en cas de jour sans piquet.

@@ -45,6 +45,9 @@ th[data-a]{cursor:pointer}tr[data-a]{cursor:pointer}tr[data-a]:hover{background:
 .gx{position:absolute;top:7px;height:var(--bar,36px);display:flex;align-items:center;padding:0 10px;border-radius:5px;color:#fff;font-size:.93rem;font-weight:600;overflow:hidden;box-shadow:0 0 0 2px #fff;z-index:1}svg text{font-size:10px;fill:#5b6574}
 .now{position:absolute;top:0;bottom:0;width:2px;background:#d00;z-index:2}
 #clock{display:flex;flex-direction:column;align-items:flex-end;line-height:1.05;padding-left:6px}#clock b{font-size:var(--clk,34px);font-variant-numeric:tabular-nums;letter-spacing:.5px}
+#pqalert{display:none;margin:8px 14px 0;padding:8px 12px;border-left:5px solid #b3261e;background:#fdecea}#app.wide{grid-template-columns:minmax(0,1fr)}.big{font-size:1.7rem;font-weight:700;margin:4px 0}
+.pt{border-collapse:collapse;font-size:.85rem}.pt th,.pt td{border:1px solid var(--l);padding:2px 0;text-align:center;min-width:27px}.pt th.nm,.pt td.nm{min-width:180px;text-align:left;padding:3px 8px;white-space:nowrap}.pt .we{background:#eef0f4}.pt th.miss{background:#fdecea;color:#b3261e;font-weight:700}.pt td.on{background:#dff3e4;color:#1b7a3d;font-weight:700}.pt td[data-a]{cursor:pointer}.pt td[data-a]:hover{background:#eef3fa}
+.cp td[data-a]{cursor:pointer;min-width:74px}.cok{background:#dff3e4;color:#1b7a3d}.cwn{background:#fff3cd;color:#7a5a00}.cbad{background:#fdecea;color:#b3261e;font-weight:700}.cz{color:#9aa4b2}
 .lk{cursor:pointer;color:var(--b)}.lk:hover{text-decoration:underline}
 .sv2{border:1px solid var(--l);border-radius:5px;padding:6px 8px;margin:6px 0}.sv2 ul{margin:4px 0;padding-left:18px}
 .wn{background:#fff3cd;padding:6px 8px;border-radius:4px;margin:6px 0;font-size:.85rem}
@@ -70,9 +73,14 @@ dialog label{display:block;margin:7px 0}dialog input,dialog select,dialog textar
   <button data-a="go" data-v="cours">Gardes en cours <span id="n1"></span></button>
   <button data-a="go" data-v="traiter">À traiter <span id="n2"></span></button>
   <button data-a="go" data-v="hist">Historique</button>
+  <button data-a="go" data-v="piq">Piquet du jour <span id="n3" class="er"></span></button>
+  <button data-a="go" data-v="plan">Planning piquets</button>
+  <button data-a="go" data-v="cad">Cadres de piquet</button>
+  <button data-a="go" data-v="cap" id="tcap">Capacités</button>
   <button data-a="go" data-v="admin" id="tadm">Administration</button>
 </nav>
 <div id="err" role="alert"></div>
+<div id="pqalert" role="alert"></div>
 <main id="app"></main>
 <button id="pan" data-a="pan" aria-expanded="true" aria-label="Masquer le panneau de détail" title="Masquer / afficher le panneau de détail">»</button>
 <dialog id="dlg"></dialog>
@@ -90,9 +98,25 @@ const toL=i=>{if(!i)return'';const d=new Date(i);return ymd(d)+'T'+tm(i)},toI=l=
 const LBL={en_cours:'En cours',a_traiter:'Terminée — à traiter',traitee:'Traitée'};
 const ls=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k)||'';localStorage.setItem(k,v)}catch(e){return''}};
 const S={view:'dash',sel:null,pan:ls('gpan')!=='0',gs:'type',all:false,admin:null,open:new Set(),cday:ymd(new Date()),cmon:ymd(new Date()).slice(0,7),day:ymd(new Date()),grp:'mois',f:{},h:{},sort:{k:'debut',d:-1},user:ls('gu'),role:(ls('gr')==='Administrateur'?'':ls('gr'))||'Opérateur'};
-let D=null,C=null,AG=null,dir=null,busy=false;const MO={};
+let D=null,C=null,AG=null,CAD=null,dir=null,busy=false;const MO={};
 const rw=()=>S.role!=='Consultation',adm=()=>S.role==='Administrateur',canEdit=g=>adm()||(rw()&&g.statut!=='traitee');
 const G=(d,id)=>d.gardes.find(g=>g.id===id),AN=a=>a||'?',isPq=a=>a.piquet===true||a.mode==='piquet';
+/* ===== Piquets d'encadrement (cadres joignables hors horaires de bureau) ===== */
+const PQN=new Set();
+const pqKey=ym=>{const[y,m]=ym.split('-').map(Number);return'Piquets/'+y+'/'+MONTHS[m-1]+'.json'};
+const CADL=()=>CAD?.cadres||[],cadName=c=>c.nom.toUpperCase()+' '+c.prenom;
+const pqOf=day=>MO[pqKey(day.slice(0,7))]?.data.jours?.[day]||null;
+function pqWho(day){const j=pqOf(day);if(!j)return null;const c=CADL().find(x=>x.id===j.id);return{nom:c?cadName(c):j.nom,tel:c?.tel||'',actif:c?c.actif!==false:true}}
+const pqDays=ym=>{const[y,m]=ym.split('-').map(Number);return Array.from({length:new Date(y,m,0).getDate()},(_,i)=>ym+'-'+P(i+1))};
+const pqMissing=ym=>pqDays(ym).filter(d=>!pqOf(d));
+const pqWatch=()=>{const n=new Date(),a=ymd(n).slice(0,7),b=ymd(new Date(n.getFullYear(),n.getMonth()+1,1)).slice(0,7);return[...new Set([a,b,S.pm||'',...PQN].filter(Boolean))]};
+async function loadPiq(ym){PQN.add(ym);const key=pqKey(ym);if(MO[key])return false;let h;try{h=await fileAtKey(key)}catch(e){return false}
+  const f=await h.getFile(),t=await f.text(),d=JSON.parse(t);validate(d);MO[key]={h,t,data:d,mod:f.lastModified,size:f.size};return true}
+async function pqCommit(ch){if(!rw())throw new Error('Droits insuffisants.');const cads=CADL();let first=null,last=null,nom='';
+  await commit(async ctx=>{for(const[day,cid]of ch){const d=await ctx.pmois(day.slice(0,7));first=first||day.slice(0,7);d.jours=d.jours||{};last=day;
+      if(cid){const c=cads.find(x=>x.id===cid);if(!c)throw new Error('Cadre introuvable.');d.jours[day]={id:c.id,nom:cadName(c)};nom=cadName(c)}else delete d.jours[day]}
+    const one=ch.length===1;return{pqm:first,action:'Piquet d’encadrement',objet:one?ch[0][0]:'période',details:one?(ch[0][1]?nom:'retiré'):ch.length+' jours, du '+ch[0][0]+' au '+last+' : '+(nom||'retrait')}})}
+const CAF=p=>[{k:'nom',l:'Nom',r:1,v:p.nom},{k:'prenom',l:'Prénom',r:1,v:p.prenom},{k:'tel',l:'Téléphone',v:p.tel},{k:'actif',l:'Cadre actif',t:'checkbox',v:p.actif!==false}];
 function choose(title,label,opts){return new Promise((res,rej)=>{const d=$('dlg2');
   d.innerHTML=`<form method="dialog"><h3>${esc(title)}</h3><label>${esc(label)}<select name="v">${opts.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select></label><p><button>Valider</button> <button type="button" class="s" data-a="close2">Annuler</button></p></form>`;
   let done=false;const fm=d.querySelector('form');fm.onsubmit=e=>{e.preventDefault();done=true;res(fm.elements.v.value);d.close()};
@@ -149,8 +173,8 @@ const AGF=p=>[{k:'mat',l:'Matricule',r:1,v:p.mat},{k:'nom',l:'Nom',r:1,v:p.nom},
 function poolView(){const st=agStats(),q=nz(S.pf||''),pl=[...PL()].sort((a,b)=>nz(a.nom+' '+a.prenom).localeCompare(nz(b.nom+' '+b.prenom))).filter(p=>!q||nz([p.mat,p.nom,p.prenom,p.contrat].join(' ')).includes(q));
   return`<h3>Pool d’agents (${PL().length}) <button class="s" data-a="poolAdd">+ Agent</button> <button class="s" data-a="poolImp">Importer une liste</button></h3>
   <div class="fl"><label>Rechercher <input data-f="pf" value="${esc(S.pf||'')}"></label></div>
-  <table><tr><th>Matricule</th><th>Nom</th><th>Prénom</th><th>Contrat</th><th>Statut</th><th>Services</th><th>Heures</th><th>Piquets</th><th>Alertes LTR</th><th></th></tr>${pl.map(p=>{const o=st.get(p.mat)||{n:0,h:0,pq:0,lt:0};
-    return`<tr${p.actif===false?' class="m"':''}><td>${esc(p.mat)}</td><td>${esc(p.nom)}</td><td>${esc(p.prenom)}</td><td>${esc(p.contrat)}</td><td>${p.actif===false?'inactif':'actif'}</td><td>${o.n}</td><td>${Math.round(o.h*10)/10} h</td><td>${o.pq}</td><td>${o.lt||''}</td><td><button class="s" data-a="poolEdit" data-m="${esc(p.mat)}" aria-label="Modifier">✎</button> <button class="s" data-a="poolTog" data-m="${esc(p.mat)}">${p.actif===false?'Activer':'Désactiver'}</button></td></tr>`}).join('')||'<tr><td>Aucun agent. Ajoutez-en ou importez une liste.</td></tr>'}</table>
+  <table><tr><th>Matricule</th><th>Nom</th><th>Prénom</th><th>Contrat</th><th>Statut</th><th>Services</th><th>Heures</th><th>Piquets</th><th>Alertes LTR</th><th>Disponibilités</th><th></th></tr>${pl.map(p=>{const o=st.get(p.mat)||{n:0,h:0,pq:0,lt:0};
+    return`<tr${p.actif===false?' class="m"':''}><td>${esc(p.mat)}</td><td>${esc(p.nom)}</td><td>${esc(p.prenom)}</td><td>${esc(p.contrat)}</td><td>${p.actif===false?'inactif':'actif'}</td><td>${o.n}</td><td>${Math.round(o.h*10)/10} h</td><td>${o.pq}</td><td>${o.lt||''}</td><td>${nSlots(p)}</td><td><button class="s" data-a="poolEdit" data-m="${esc(p.mat)}" aria-label="Modifier">✎</button> <button class="s" data-a="poolTog" data-m="${esc(p.mat)}">${p.actif===false?'Activer':'Désactiver'}</button> <button class="s" data-a="poolDispo" data-m="${esc(p.mat)}">Dispo.</button> <button class="x" data-a="poolDel" data-m="${esc(p.mat)}" aria-label="Supprimer">✕</button></td></tr>`}).join('')||'<tr><td>Aucun agent. Ajoutez-en ou importez une liste.</td></tr>'}</table>
   <p class="m">Suivi calculé sur les mois chargés. Un agent hors pool reste saisissable librement, sans suivi ni contrôle LTR. Renommer un agent ne modifie pas les plannings déjà saisis.</p>`}
 function ltrForm(){const r=LTRC(),f=(k,l)=>`<label>${l} <input type="number" style="width:64px" data-ltr="${k}" min="1" max="99" value="${r[k]}"></label>`;
   return`<h3>Contrôle LTR (agents du pool)</h3><div class="fl">${f('jours','Jours consécutifs maximum')}${f('repos','Repos minimum entre 2 services (h)')}${f('sem','Repos après les jours consécutifs maximum (h)')}${f('jour','Travail maximum sur une plage de jour (h)')}${f('pjour','Plage de jour (h)')}${f('nuit','Travail maximum sur une plage touchant la nuit (h)')}${f('pnuit','Plage de nuit (h)')}</div><p class="m">Jour = 06:00–23:00, nuit = 23:00–06:00. Une plage qui touche la nuit suit les règles de nuit. Une alerte s’affiche quand un agent du pool enfreint une règle à son entrée en planification ; les infractions restent signalées par ⚠ dans le Gantt et dans la fiche.</p>`}
@@ -198,7 +222,7 @@ async function lock(){for(let i=0;i<40;i++){const l=await rdLock();
   await sleep(80+Math.random()*120)}return false}
 async function unlock(){try{const l=await rdLock();if(l&&l.owner===me)await dir.removeEntry(LOCK)}catch(e){}}
 async function backup(t,key,tag){const b=await dir.getDirectoryHandle(BK,{create:true});
-  await wr(t,await b.getFileHandle(new Date().toISOString().replace(/[:.]/g,'-')+'_'+(key==='@cfg'?'config':key==='@pool'?'agents':key.replace(/\//g,'_').replace(/\.json$/i,''))+(tag?'_'+tag:'')+'.json',{create:true}));
+  await wr(t,await b.getFileHandle(new Date().toISOString().replace(/[:.]/g,'-')+'_'+(key==='@cfg'?'config':key==='@pool'?'agents':key==='@cad'?'cadres':key.replace(/\//g,'_').replace(/\.json$/i,''))+(tag?'_'+tag:'')+'.json',{create:true}));
   const n=[];for await(const[k]of b.entries())n.push(k);n.sort();while(n.length>300)await b.removeEntry(n.shift())}
 function validate(d){
   if(d.schema_version!==1)throw new Error('Version de schéma inconnue : '+d.schema_version);
@@ -217,6 +241,9 @@ async function commit(fn){
   const readJ=async(h,key)=>{const t=await(await h.getFile()).text();try{return JSON.parse(t)}catch(e){throw new Error('Fichier JSON invalide ('+key+') : écriture bloquée.')}};
   const ctx={
     pool:async()=>{if(!E.has('@pool'))E.set('@pool',{key:'@pool',cfg:1,h:MO['@pool'].h,data:await readJ(MO['@pool'].h,'agents.json')});return E.get('@pool').data},
+    cad:async()=>{if(!E.has('@cad'))E.set('@cad',{key:'@cad',cfg:1,h:MO['@cad'].h,data:await readJ(MO['@cad'].h,'cadres.json')});return E.get('@cad').data},
+    pmois:async ym=>{const k='P'+ym;if(E.has(k))return E.get(k).data;const key=pqKey(ym);let h=null;try{h=await fileAtKey(key)}catch(e){if(e.name!=='NotFoundError')throw e}
+      const data=h?await readJ(h,key):{schema_version:1,mois:ym,rev:0,jours:{},audit:[]};E.set(k,{key,nkey:key,pq:1,ym,h,data});return data},
     cfg:async()=>{if(!E.has('@cfg'))E.set('@cfg',{key:'@cfg',cfg:1,h:MO['@cfg'].h,data:await readJ(MO['@cfg'].h,'config.json')});return E.get('@cfg').data},
     garde:async id=>{if(E.has(id))return E.get(id).data;const src=D.gardes.find(z=>z.id===id);if(!src)throw new Error('Garde introuvable.');
       let h;try{h=await fileAtKey(src._k)}catch(e){throw conflit()}
@@ -225,12 +252,13 @@ async function commit(fn){
     remove:id=>{const e=E.get(id);if(!e)throw new Error('Garde non ouverte.');e.del=true}};
   try{
     if(!await lock())throw new Error('Fichiers verrouillés par un autre poste. Réessayez dans quelques secondes.');lk=true;
-    const a=await fn(ctx);if(a.cfg)await ctx.cfg();if(a.pool)await ctx.pool();
-    const L=[...E.values()],main=a.pool?E.get('@pool'):a.cfg?E.get('@cfg'):L.find(e=>!e.cfg&&!e.del);if(!main)throw new Error('Aucune donnée à enregistrer.');
+    const a=await fn(ctx);if(a.cfg)await ctx.cfg();if(a.pool)await ctx.pool();if(a.cad)await ctx.cad();
+    const L=[...E.values()],main=a.pqm?E.get('P'+a.pqm):a.cad?E.get('@cad'):a.pool?E.get('@pool'):a.cfg?E.get('@cfg'):L.find(e=>!e.cfg&&!e.pq&&!e.del);if(!main)throw new Error('Aucune donnée à enregistrer.');
     (main.data.audit=main.data.audit||[]).push({id:uid(),le:new Date().toISOString(),user:S.user||'(non renseigné)',role:S.role,action:a.action,objet:a.objet,details:a.details});
     const W=[];
     for(const e of L){if(e.del)continue;validate(e.data);
       if(e.cfg){e.data.rev=(e.data.rev||0)+1;e.out=JSON.stringify(e.data,null,1);W.push(e);continue}
+      if(e.pq){e.data.rev=(e.data.rev||0)+1;const[yy,mm]=e.ym.split('-').map(Number);e.dh=await dirAt(['Piquets',String(yy)],true);e.nm=MONTHS[mm-1]+'.json';e.out=JSON.stringify(e.data,null,1);W.push(e);continue}
       const fp=gPath(e.data),fk=fp.slice(0,3).join('/'),dh=await dirAt(fp.slice(0,3),true);let nm=fp[3]+'.json';
       if(fk+'/'+nm!==e.key){let ex=true;try{await dh.getFileHandle(nm)}catch(x){ex=false}if(ex)nm=fp[3]+'-'+e.data.id.slice(-4)+'.json'}
       e.nkey=fk+'/'+nm;e.dh=dh;e.nm=nm;e.out=JSON.stringify(e.data,null,1);W.push(e)}
@@ -238,7 +266,7 @@ async function commit(fn){
     for(const e of W){const f=await(e.cfg?e.h:e.h2).getFile();if((await f.text())!==e.out)throw new Error('Relecture différente : enregistrement non confirmé.');e.mod=f.lastModified;e.size=f.size}
     for(const e of L){if(e.cfg)continue;if(e.del)await rmKey(e.key);else if(e.key&&e.key!==e.nkey)await rmKey(e.key)}
     L.forEach(e=>{if(e.cfg){MO[e.key]={h:e.h,t:e.out,data:e.data,mod:e.mod,size:e.size};return}
-      if(e.key)delete MO[e.key];if(!e.del){MO[e.nkey]={h:e.h2,t:e.out,data:e.data,mod:e.mod,size:e.size};LF.add(e.nkey.split('/').slice(0,3).join('/'))}});
+      if(e.key)delete MO[e.key];if(!e.del){MO[e.nkey]={h:e.h2,t:e.out,data:e.data,mod:e.mod,size:e.size};if(!e.pq)LF.add(e.nkey.split('/').slice(0,3).join('/'))}});
     rebuild();setSt('Enregistrement confirmé','o');sync();$('err').style.display='none';
     try{for(const e of L){if(e.cfg)await backup(e.out,e.key);else if(e.del)await backup(JSON.stringify(e.data,null,1),e.key,'supprimee');else await backup(e.out,e.nkey)}$('bk').textContent='Dernière sauvegarde : '+tm(new Date())}catch(e){$('bk').textContent='ÉCHEC sauvegarde : '+e.message}
   }catch(e){setSt(e.conflit?'Conflit détecté':'Enregistrement échoué','k');if(e.conflit)try{await pollOnce(1)}catch(x){}throw e}
@@ -274,11 +302,12 @@ async function loadWindow(deep){const keys=[];
 const UID={police:14,barre:36,service:22,libelle:170,panneau:380,horloge:34},UIR={police:[11,22],barre:[22,64],service:[16,40],libelle:[120,320],panneau:[280,560],horloge:[20,64]};
 const UI=()=>({...UID,...(C?.affichage||{})});
 function applyUi(){const u=UI(),r=document.documentElement.style;r.setProperty('--fs',u.police+'px');r.setProperty('--bar',u.barre+'px');r.setProperty('--sv',u.service+'px');r.setProperty('--lab',u.libelle+'px');r.setProperty('--pan',u.panneau+'px');r.setProperty('--clk',u.horloge+'px')}
-function rebuild(){C=MO['@cfg'].data;AG=MO['@pool']?MO['@pool'].data:null;applyUi();const m=new Map(),au=[...(C.audit||[]),...(AG?.audit||[])];
-  for(const[k,e]of Object.entries(MO)){if(k==='@cfg'||k==='@pool')continue;const g=e.data;g._k=k;au.push(...(g.audit||[]));const o=m.get(g.id);if(!o||(o.v||0)<=(g.v||0))m.set(g.id,g)}
+function rebuild(){C=MO['@cfg'].data;AG=MO['@pool']?MO['@pool'].data:null;CAD=MO['@cad']?MO['@cad'].data:null;applyUi();const m=new Map(),au=[...(C.audit||[]),...(AG?.audit||[]),...(CAD?.audit||[])];
+  for(const[k,e]of Object.entries(MO)){if(k[0]==='@'||k.startsWith('Piquets/')){if(k.startsWith('Piquets/'))au.push(...(e.data.audit||[]));continue}const g=e.data;g._k=k;au.push(...(g.audit||[]));const o=m.get(g.id);if(!o||(o.v||0)<=(g.v||0))m.set(g.id,g)}
   D={gardes:[...m.values()],audit:au.sort((a,b)=>a.le<b.le?-1:1)}}
 async function pollOnce(q){S.pn=(S.pn||0)+1;let ch=await loadWindow(S.pn%6===0);
-  for(const k of['@cfg','@pool']){const c=MO[k],f=await c.h.getFile();if(f.lastModified!==c.mod||f.size!==c.size){const t=await f.text(),d=JSON.parse(t);validate(d);MO[k]={h:c.h,t,data:d,mod:f.lastModified,size:f.size};ch=true}}
+  for(const ym of pqWatch())if(await loadPiq(ym))ch=true;
+  for(const k of['@cfg','@pool','@cad',...Object.keys(MO).filter(k=>k.startsWith('Piquets/'))]){const c=MO[k],f=await c.h.getFile();if(f.lastModified!==c.mod||f.size!==c.size){const t=await f.text(),d=JSON.parse(t);validate(d);MO[k]={h:c.h,t,data:d,mod:f.lastModified,size:f.size};ch=true}}
   if(ch){rebuild();if(!$('dlg').open)render();if(!q)setSt('Données mises à jour (autre poste)','o')}sync()}
 const note=()=>{const ms=[...LF].map(k=>{const p=k.split('/');return p[0]+'-'+P(MONTHS.indexOf(p[2])+1)}).sort();return`<p class="m">Mois chargés : ${ms.length?ms[0]+' → '+ms[ms.length-1]:'aucun'}${S.all?' (tout)':' · <button class="s" data-a="loadAll">Tout charger</button>'}</p>`};
 const dupChk=(num,id)=>{if(num&&D.gardes.some(g=>g.id!==id&&(g.numero||'').toLowerCase()===num.toLowerCase())&&!confirm('Une garde avec l’ID « '+num+' » existe déjà. Continuer ?'))throw new Error('Enregistrement annulé.')};
@@ -310,9 +339,12 @@ async function openDir(d){
   }
   const fl=await ch.getFile(),tx=await fl.text();
   try{const c=JSON.parse(tx);validate(c);if(!c.types||!c.services)throw new Error('configuration incomplète');
-    for(const k in MO)delete MO[k];LF.clear();SEEN.clear();MO['@cfg']={h:ch,t:tx,data:c,mod:fl.lastModified,size:fl.size};
+    for(const k in MO)delete MO[k];LF.clear();SEEN.clear();PQN.clear();MO['@cfg']={h:ch,t:tx,data:c,mod:fl.lastModified,size:fl.size};
     let ah;try{ah=await dir.getFileHandle('agents.json')}catch(e){if(e.name!=='NotFoundError')throw e;ah=await dir.getFileHandle('agents.json',{create:true});await wr(JSON.stringify({schema_version:1,rev:0,pool:c.pool||[],audit:[]},null,1),ah)}
     const af=await ah.getFile(),at=await af.text(),ad=JSON.parse(at);validate(ad);if(!Array.isArray(ad.pool))ad.pool=[];MO['@pool']={h:ah,t:at,data:ad,mod:af.lastModified,size:af.size};
+    let ch2;try{ch2=await dir.getFileHandle('cadres.json')}catch(e){if(e.name!=='NotFoundError')throw e;ch2=await dir.getFileHandle('cadres.json',{create:true});await wr(JSON.stringify({schema_version:1,rev:0,cadres:[],audit:[]},null,1),ch2)}
+    const cf2=await ch2.getFile(),ct=await cf2.text(),cd=JSON.parse(ct);validate(cd);if(!Array.isArray(cd.cadres))cd.cadres=[];MO['@cad']={h:ch2,t:ct,data:cd,mod:cf2.lastModified,size:cf2.size};
+    for(const ym of pqWatch())await loadPiq(ym);
     rebuild();await loadWindow();rebuild()}
   catch(e){D=null;throw new Error('Configuration illisible ou invalide ('+e.message+'). Aucune écriture effectuée.')}
   setSt('Connecté','o');sync();render();
@@ -406,10 +438,12 @@ function pdfExport(g,du,au,reels){pdfSave(pdfBytes(g,du,au,reels),'services_'+sl
 /* Liste des agents ayant travaillé sur une période, toutes gardes confondues (pour la planification) */
 function pdfAgents(du,au,reels,tri){
   const a0=+new Date(du+'T00:00'),a1=+new Date(au+'T00:00')+864e5,rows=[];
-  D.gardes.forEach(g=>g.services.forEach(v=>{if(v.type==='Pause')return;v.aff.forEach(a=>{if(T(a.fin)>a0&&T(a.debut)<a1)rows.push({g,v:v.type,a})})}));
+  D.gardes.forEach(g=>g.services.forEach(v=>{v.aff.forEach(a=>{if(T(a.fin)>a0&&T(a.debut)<a1)rows.push({g,v:v.type,a})})}));
   if(!rows.length)throw new Error('Aucun agent n’a travaillé sur cette période.');
   const nm=z=>(z.a.agent||'').toLowerCase();
-  rows.sort(tri==='agent'?(p,q)=>nm(p).localeCompare(nm(q))||T(p.a.debut)-T(q.a.debut):(p,q)=>T(p.a.debut)-T(q.a.debut)||nm(p).localeCompare(nm(q)));
+  const cmpT=(p,q)=>T(p.a.debut)-T(q.a.debut),gn=z=>z.g.numero||'';
+  const cmpG=(p,q)=>{const x=gn(p),y=gn(q);if(x&&!y)return-1;if(!x&&y)return 1;return x.localeCompare(y,'fr',{numeric:true})||(p.g.personne||'').localeCompare(q.g.personne||'','fr')||(p.g.id===q.g.id?0:p.g.id<q.g.id?-1:1)};
+  rows.sort(tri==='garde'?(p,q)=>cmpG(p,q)||cmpT(p,q)||nm(p).localeCompare(nm(q)):tri==='agent'?(p,q)=>nm(p).localeCompare(nm(q))||cmpT(p,q):(p,q)=>cmpT(p,q)||cmpG(p,q)||nm(p).localeCompare(nm(q)));
   const rg=(a,b)=>{const nd=ymd(new Date(T(b)))>ymd(new Date(T(a)));return tm(a)+'–'+(nd&&tm(b)==='00:00'?'24:00':tm(b)+(nd?' (+1)':''))};
   const dl=i=>['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'][new Date(T(i)).getDay()]+' '+fmt(i).slice(0,10);
   const mins=a=>{const r=a.debut_reel&&a.fin_reel;return(T(r?a.fin_reel:a.fin)-T(r?a.debut_reel:a.debut))/6e4};
@@ -425,12 +459,12 @@ function pdfAgents(du,au,reels,tri){
     ops.push(`0.25 w ${M} ${y-RH} m ${W-M} ${y-RH} l S`);y-=RH};
   const newPage=()=>{ops=['0.6 G'];pages.push(ops);y=H-M;
     if(pages.length===1){txt(M,y-14,'Agents ayant travaillé du '+d1+' au '+d2,15,1);
-      txt(M,y-32,`${rows.length} affectations · ${ag} agents · ${gd} gardes · toutes les gardes, quel que soit leur statut · tri ${tri==='agent'?'par agent':'chronologique'}`,10);
+      txt(M,y-32,`${rows.length} affectations · ${ag} agents · ${gd} gardes · toutes les gardes, quel que soit leur statut · tri ${tri==='agent'?'par agent':tri==='garde'?'par numéro de garde puis chronologique':'chronologique (début du service, puis numéro de garde)'}`,10);
       txt(M,y-47,`Édité le ${fmt(now)} par ${S.user||'—'}`,10);y-=66}
     else{txt(M,y-12,'Agents ayant travaillé du '+d1+' au '+d2+' (suite)',10,1);y-=26}
     row(CW.map(c=>c[0]),1)};
   newPage();let last='';
-  rows.forEach(z=>{if(y-RH<M+20)newPage();const k=tri==='agent'?nm(z):ymd(new Date(T(z.a.debut))),sep=last!==''&&k!==last;last=k;
+  rows.forEach(z=>{if(y-RH<M+20)newPage();const k=tri==='agent'?nm(z):tri==='garde'?z.g.id:ymd(new Date(T(z.a.debut))),sep=last!==''&&k!==last;last=k;
     row([z.g.numero||'—',z.g.personne||'—',z.a.agent||'—',z.a.mat||'',dl(z.a.debut),z.v,rg(z.a.debut,z.a.fin),...(reels?[z.a.debut_reel&&z.a.fin_reel?rg(z.a.debut_reel,z.a.fin_reel):'—']:[]),isPq(z.a)?'Oui':''],0,sep)});
   const tot=rows.reduce((n,z)=>n+mins(z.a),0);
   if(y-52<M+20)newPage();y-=12;
@@ -439,6 +473,7 @@ function pdfAgents(du,au,reels,tri){
   pages.forEach((o,i)=>{const f=(t,x)=>o.push(`BT /F1 8 Tf ${x} 20 Td (${pe(t)}) Tj ET`);f('Suivi des gardes — document confidentiel',M);f(`Page ${i+1}/${pages.length}`,W-M-48)});
   return pdfAssemble(pages,W,H);
 }
+async function capLoad(){const m=wkMon(S.cw),e=new Date(m+'T12:00');e.setDate(e.getDate()+6);await ensureMonths(m,ymd(e))}
 async function ensureMonths(du,au){let y=+du.slice(0,4),m=+du.slice(5,7)-1;const y1=+au.slice(0,4),m1=+au.slice(5,7);if(m<1){m=12;y--}
   for(let i=0;i<60;i++){C.types.forEach(t=>LF.add(y+'/'+typeDir(t.nom)+'/'+MONTHS[m-1]));if(y===y1&&m===m1)break;if(++m>12){m=1;y++}}
   if(await loadWindow())rebuild()}
@@ -455,7 +490,7 @@ function LK(g,ed){const tk=z=>z.x?T(z.x.debut_reel||z.x.debut_prevu):0,del=id=>e
   const l=(g.liens||[]).map(k=>({k,x:D.gardes.find(z=>z.id===k.id)})).sort((a,b)=>tk(a)-tk(b)),me=T(g.debut_reel||g.debut_prevu);
   return`<h3>Surveillances liées</h3><ul>${l.map(({k,x})=>x?`<li><span class="lk" tabindex="0" data-a="selG" data-id="${x.id}">${dot(x.type)}<b>${esc(ref(x))}</b> · ${esc(x.numero)}</span> <span class="chip ${x.statut}">${LBL[x.statut]}</span> <span class="m">${tk({x})<me?'avant':'après'} · ${fmt(x.debut_reel||x.debut_prevu)}</span>${del(x.id)}</li>`:`<li class="m">${esc(k.numero)} (non chargée : « Tout charger »)${del(k.id)}</li>`).join('')||'<li class="m">Aucune.</li>'}</ul>${ed?'<p><button class="s" data-a="lier">+ Lier à une garde</button> <button class="s" data-a="suite">+ Créer la suite</button></p>':''}`}
 const H={
-  go:t=>{S.view=t.v;render()},close:()=>$('dlg').close(),close2:()=>$('dlg2').close(),
+  go:t=>{S.view=t.v;render();if(t.v==='cap')return capLoad().then(()=>render())},close:()=>$('dlg').close(),close2:()=>$('dlg2').close(),
   selG:t=>{S.sel=t.id;if(!S.pan){S.pan=true;ls('gpan','1')}render()},
   tgP:t=>{const g=cur();return upd(g.id,g.v,x=>{const a=x.services.find(z=>z.id===t.s).aff.find(z=>z.id===t.i),n=!isPq(a);a.piquet=n;delete a.mode;return{action:'Piquet',objet:oid(x),details:a.agent+' : '+(n?'droit au piquet':'sans piquet')}}).catch(e=>{render();throw e})},
   pan:()=>{S.pan=!S.pan;ls('gpan',S.pan?'1':'0');render()},
@@ -531,11 +566,33 @@ const H={
     [cf.types[i],cf.types[j]]=[cf.types[j],cf.types[i]];return{cfg:1,action:'Ordre des types de garde',objet:t.n,details:'position '+(j+1)}}),
   expAg:()=>{const t=ymd(new Date()),d0=ymd(new Date(Date.now()-3*864e5));
     form('Exporter les agents en PDF',[{k:'du',l:'Du (jour)',t:'date',r:1,v:d0},{k:'au',l:'Au (jour)',t:'date',r:1,v:t},
-      {k:'tri',l:'Tri',o:[['date','Chronologique'],['agent','Par agent']],v:'date'},{k:'reels',l:'Horaires',o:[['1','Prévus et réels'],['0','Prévus seulement']],v:'1'}],async f=>{
+      {k:'tri',l:'Tri',o:[['date','Chronologique (début du service, puis n° de garde)'],['garde','Par numéro de garde, puis chronologique'],['agent','Par agent']],v:'date'},{k:'reels',l:'Horaires',o:[['1','Prévus et réels'],['0','Prévus seulement']],v:'1'}],async f=>{
       if(f.au<f.du)throw new Error('Le jour de fin doit être postérieur ou égal au jour de début.');
       await ensureMonths(f.du,f.au);pdfSave(pdfAgents(f.du,f.au,f.reels==='1',f.tri),'agents_'+f.du+'_'+f.au+'.pdf');
       try{await commit(async ctx=>({cfg:1,action:'Export PDF des agents',objet:'période',details:'du '+f.du+' au '+f.au}))}
       catch(e){showErr(new Error('PDF créé, mais l’export n’a pas pu être journalisé : '+e.message))}})},
+  pqNav:t=>{let[y,m]=(S.pm||ymd(new Date()).slice(0,7)).split('-').map(Number);m+=+t.d;if(m<1){m=12;y--}if(m>12){m=1;y++}S.pm=y+'-'+P(m);return loadPiq(S.pm).then(c=>{if(c)rebuild();render()})},
+  pqSet:t=>{const j=pqOf(t.day);return pqCommit([[t.day,j&&j.id===t.c?null:t.c]])},
+  pqPer:()=>{const ac=CADL().filter(c=>c.actif!==false);if(!ac.length)throw new Error('Aucun cadre actif : ajoutez-en dans « Cadres de piquet ».');
+    form('Attribuer une période de piquet',[{k:'c',l:'Cadre',o:ac.map(c=>[c.id,cadName(c)]),v:ac[0].id},{k:'du',l:'Du (jour)',t:'date',r:1,v:ymd(new Date())},{k:'au',l:'Au (jour)',t:'date',r:1,v:ymd(new Date())},{k:'ow',l:'Remplacer les piquets déjà attribués',t:'checkbox',v:false}],async f=>{
+      if(f.au<f.du)throw new Error('Le jour de fin doit être postérieur ou égal au jour de début.');
+      const ch=[];for(let d=new Date(f.du+'T12:00'),e=new Date(f.au+'T12:00');d<=e&&ch.length<400;d.setDate(d.getDate()+1)){const k=ymd(d);if(f.ow==='1'||!pqOf(k))ch.push([k,f.c])}
+      if(!ch.length)throw new Error('Tous ces jours ont déjà un piquet (cochez « Remplacer » pour les écraser).');await pqCommit(ch)})},
+  cadAdd:()=>{if(!adm())throw new Error('Réservé à l’administrateur.');form('Nouveau cadre de piquet',CAF({}),f=>commit(async ctx=>{const d=await ctx.cad();d.cadres=d.cadres||[];const nom=f.nom.trim(),pr=f.prenom.trim();
+    if(d.cadres.some(c=>nz(c.nom+' '+c.prenom)===nz(nom+' '+pr)))throw new Error('Ce cadre existe déjà.');d.cadres.push({id:uid(),nom,prenom:pr,tel:f.tel.trim(),actif:f.actif==='1'});return{cad:1,action:'Cadres de piquet : ajout',objet:nom+' '+pr}}))},
+  cadEdit:t=>{if(!adm())throw new Error('Réservé à l’administrateur.');const c=CADL().find(x=>x.id===t.id);form('Modifier le cadre',CAF(c),f=>commit(async ctx=>{const q=(await ctx.cad()).cadres.find(x=>x.id===t.id);
+    q.nom=f.nom.trim();q.prenom=f.prenom.trim();q.tel=f.tel.trim();q.actif=f.actif==='1';return{cad:1,action:'Cadres de piquet : modification',objet:q.nom+' '+q.prenom}}))},
+  cadTog:t=>{if(!adm())throw new Error('Réservé à l’administrateur.');return commit(async ctx=>{const q=(await ctx.cad()).cadres.find(x=>x.id===t.id);q.actif=q.actif===false;return{cad:1,action:q.actif?'Cadres de piquet : activation':'Cadres de piquet : désactivation',objet:cadName(q)}})},
+  poolDel:t=>{if(!adm())throw new Error('Réservé à l’administrateur.');const p=PL().find(x=>x.mat===t.m);if(!p)return;
+    const n=D.gardes.reduce((k,g)=>k+g.services.reduce((j,v)=>j+v.aff.filter(a=>a.mat===p.mat).length,0),0);
+    if(!confirm('Supprimer '+pcan(p)+' (matricule '+p.mat+') du pool ?\nIl apparaît dans '+n+' affectation(s) des mois chargés : elles conservent son nom et son matricule.'))return;
+    return commit(async ctx=>{const d=await ctx.pool(),k=d.pool.findIndex(x=>x.mat===t.m);if(k<0)throw new Error('Agent introuvable.');const q=d.pool.splice(k,1)[0];return{pool:1,action:'Pool : suppression',objet:q.mat,details:q.nom+' '+q.prenom}})},
+  poolDispo:t=>{if(!adm())throw new Error('Réservé à l’administrateur.');const p=PL().find(x=>x.mat===t.m);if(p)dispoDlg(p)},
+  dsvRow:t=>document.querySelectorAll('#dlg input[name=d]').forEach(i=>{if(i.value.endsWith('|'+t.s))i.checked=true}),
+  dsvAll:()=>document.querySelectorAll('#dlg input[name=d]').forEach(i=>i.checked=true),
+  dsvNone:()=>document.querySelectorAll('#dlg input[name=d]').forEach(i=>i.checked=false),
+  capSel:t=>{S.capSel=t.k;render()},
+  capNav:t=>{if(!+t.d)S.cw='';else{const m=new Date(wkMon(S.cw)+'T12:00');m.setDate(m.getDate()+7*(+t.d));S.cw=ymd(m)}S.capSel='';return capLoad().then(()=>render())},
   addT:()=>form('Nouveau type de garde',[{k:'nom',l:'Nom du type',r:1,v:''},{k:'couleur',l:'Couleur',t:'color',v:'#d9622b'}],f=>commit(async ctx=>{
     const cf=await ctx.cfg(),n=f.nom.trim();if(cf.types.some(t=>t.nom.toLowerCase()===n.toLowerCase()))throw new Error('Ce type existe déjà.');
     const t={nom:n,couleur:f.couleur,dossier:capSlug(n)};if(cf.types.some(x=>x.dossier===t.dossier))t.dossier+='-'+cf.types.length;cf.types.push(t);
@@ -562,19 +619,19 @@ const H={
     upd(g.id,g.v,x=>{x.statut='a_traiter';x.traite_le='';return{action:'Réouverture',objet:oid(x),details:f.j}}))},
 };
 document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(t&&H[t.dataset.a])Promise.resolve().then(()=>H[t.dataset.a](t.dataset)).catch(showErr)});
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('tr[data-a],th[data-a],.gr[data-a]'))e.target.click()});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('tr[data-a],th[data-a],.gr[data-a],td[data-a]'))e.target.click()});
 document.addEventListener('change',async e=>{const t=e.target,c=t.dataset.col;
   try{if(t.dataset.ltr){const k=t.dataset.ltr,v=Math.min(99,Math.max(1,Math.round(+t.value||LTRD[k])));
     await commit(async ctx=>{const cf=await ctx.cfg();cf.ltr={...(cf.ltr||{}),[k]:v};return{cfg:1,action:'Règle LTR',objet:k,details:String(v)}});return}
     if(t.dataset.ui){const k=t.dataset.ui,[lo,hi]=UIR[k],v=Math.min(hi,Math.max(lo,Math.round(+t.value||UID[k])));
     await commit(async ctx=>{const cf=await ctx.cfg();cf.affichage={...(cf.affichage||{}),[k]:v};return{cfg:1,action:'Affichage',objet:k,details:String(v)}});return}
     if(c){await commit(async ctx=>{const cf=await ctx.cfg(),x=cf[c].find(z=>z.nom===t.dataset.n);x.couleur=t.value;return{cfg:1,action:'Couleur',objet:t.dataset.n,details:t.value}});return}
-    const f=t.dataset.f;if(!f)return;const[a,b]=f.split('.');if(b)S[a][b]=t.value;else S[a]=t.value;if(await loadWindow())rebuild();render()}catch(x){showErr(x)}});
+    const f=t.dataset.f;if(!f)return;const[a,b]=f.split('.');if(b)S[a][b]=t.value;else S[a]=t.value;if(await loadWindow())rebuild();if(S.pm&&await loadPiq(S.pm))rebuild();if(a==='cw')await capLoad();render()}catch(x){showErr(x)}});
 $('user').value=S.user;$('role').value=S.role;$('dlg').addEventListener('close',()=>{$('role').value=S.role;if(D)render()});
 $('user').onchange=e=>{S.user=e.target.value.trim();ls('gu',S.user)};
 $('role').onchange=async e=>{const v=e.target.value;
   if(v==='Administrateur'){if(!D){e.target.value=S.role;showErr(new Error('Connectez-vous d’abord au dossier de données.'));return}try{await askAdmin()}catch(x){showErr(x)}return}
-  S.role=v;S.admin=null;ls('gr',v);if(S.view==='admin')S.view='dash';render()};
+  S.role=v;S.admin=null;ls('gr',v);if(S.view==='admin'||S.view==='cap'&&v==='Consultation')S.view='dash';render()};
 
 /* ===== Vues ===== */
 const COLS=[['ref','Référence'],['numero','ID'],['type','Type'],['localisation','Localisation'],['debut','Début'],['fin','Fin'],['statut','Statut']];
@@ -653,6 +710,40 @@ function vHist(){
   ${fi('du','Du','date')}${fi('au','Au','date')}${fi('ag','Agent')}
   <label>Statut <select data-f="h.st"><option value="">Tous</option>${Object.entries(LBL).map(([k,v])=>`<option value="${k}"${h.st===k?' selected':''}>${v}</option>`).join('')}</select></label></div>${tbl(l)}</div>`;
 }
+const dnl=d=>DJ[new Date(d+'T12:00').getDay()]+' '+d.slice(8)+'.'+d.slice(5,7)+'.'+d.slice(0,4);
+function vPiq(){const td=ymd(new Date()),w=pqWho(td),miss=pqMissing(td.slice(0,7)),days=Array.from({length:7},(_,i)=>ymd(new Date(Date.now()+i*864e5)));
+  return`<div class="c"><h2>Piquet d’encadrement du jour</h2><p class="m">${dnl(td)}</p>${w?`<p class="big">${esc(w.nom)}</p><p>${w.tel?'Téléphone : <b>'+esc(w.tel)+'</b>':'<span class="m">Aucun numéro enregistré</span>'}${w.actif?'':' <span class="m">(cadre désactivé)</span>'}</p>`:'<p class="big er">⚠ Aucun piquet défini aujourd’hui</p>'}</div>
+  <div class="c"><h3>Prochains jours</h3><table><tr><th>Jour</th><th>Cadre de piquet</th><th>Téléphone</th></tr>${days.map(d=>{const x=pqWho(d);return`<tr><td>${dnl(d)}</td><td>${x?esc(x.nom):'<span class="er">⚠ non défini</span>'}</td><td>${x?esc(x.tel):''}</td></tr>`}).join('')}</table></div>
+  ${miss.length?`<div class="c"><h3>Jours sans piquet dans le mois en cours (${miss.length})</h3><p>${miss.map(dnl).join(' · ')}</p>${rw()?'<p><button data-a="go" data-v="plan">Ouvrir le planning</button></p>':''}</div>`:'<div class="c m">Tous les jours du mois en cours ont un piquet.</div>'}`}
+function vPlan(){const td=ymd(new Date()),ym=S.pm||td.slice(0,7),jr=MO[pqKey(ym)]?.data.jours||{},ed=rw(),days=pqDays(ym),miss=days.filter(d=>!jr[d]),used=new Set(Object.values(jr).map(j=>j.id));
+  const cl=CADL().filter(c=>c.actif!==false||used.has(c.id)).sort((a,b)=>nz(cadName(a)).localeCompare(nz(cadName(b))));
+  const th=d=>{const g=new Date(d+'T12:00').getDay();return`<th class="${!jr[d]?'miss':g%6===0?'we':''}" title="${dnl(d)}">${+d.slice(8)}<br><span class="m">${'DLMMJVS'[g]}</span></th>`};
+  return`<div class="c"><h2>Planning des piquets d’encadrement</h2><div class="fl"><button class="s" data-a="pqNav" data-d="-1" aria-label="Mois précédent">◂</button><label>Mois <input type="month" data-f="pm" value="${ym}"></label><button class="s" data-a="pqNav" data-d="1" aria-label="Mois suivant">▸</button>${ed?'<button data-a="pqPer">Attribuer une période</button>':''}</div>
+  <p class="${miss.length?'er':'m'}">${miss.length?'⚠ '+miss.length+' jour(s) sans piquet : '+miss.map(d=>+d.slice(8)).join(', '):'Tous les jours ont un piquet.'}</p>
+  <div style="overflow-x:auto"><table class="pt"><tr><th class="nm">Cadre</th>${days.map(th).join('')}</tr>${cl.map(c=>`<tr><td class="nm">${esc(cadName(c))}${c.actif===false?' <span class="m">(inactif)</span>':''}</td>${days.map(d=>{const on=jr[d]&&jr[d].id===c.id,can=ed&&(on||c.actif!==false);return`<td class="${on?'on':''}"${can?` data-a="pqSet" data-day="${d}" data-c="${c.id}" tabindex="0" role="button" aria-label="${esc(cadName(c))} ${d}"`:''}>${on?'✕':''}</td>`}).join('')}</tr>`).join('')||`<tr><td class="nm" colspan="${days.length+1}">Aucun cadre : ajoutez-les dans « Cadres de piquet ».</td></tr>`}</table></div>
+  <p class="m">${ed?'Cliquez sur une case pour attribuer (ou retirer) le piquet d’un jour. Un jour n’a qu’un seul cadre de piquet.':'Lecture seule.'}</p></div>`}
+function vCad(){const ed=adm(),l=[...CADL()].sort((a,b)=>nz(cadName(a)).localeCompare(nz(cadName(b))));
+  return`<div class="c"><h2>Cadres pouvant être de piquet d’encadrement</h2>${ed?'<p><button data-a="cadAdd">+ Cadre</button></p>':'<p class="m">Liste modifiable par l’administrateur.</p>'}<table><tr><th>Nom</th><th>Prénom</th><th>Téléphone</th><th>Statut</th>${ed?'<th></th>':''}</tr>${l.map(c=>`<tr${c.actif===false?' class="m"':''}><td>${esc(c.nom)}</td><td>${esc(c.prenom)}</td><td>${esc(c.tel||'')}</td><td>${c.actif===false?'inactif':'actif'}</td>${ed?`<td><button class="s" data-a="cadEdit" data-id="${c.id}" aria-label="Modifier">✎</button> <button class="s" data-a="cadTog" data-id="${c.id}">${c.actif===false?'Activer':'Désactiver'}</button></td>`:''}</tr>`).join('')||'<tr><td colspan="5">Aucun cadre.</td></tr>'}</table><p class="m">Seuls les cadres actifs de cette liste peuvent être placés de piquet.</p></div>`}
+const wkMon=x=>{const d=new Date((x||ymd(new Date()))+'T12:00');d.setDate(d.getDate()-(d.getDay()+6)%7);return ymd(d)};
+const nSlots=p=>Object.values(p.dispo||{}).reduce((n,a)=>n+a.length,0)+' / '+7*C.services.filter(z=>z.nom!=='Pause').length;
+const DJC=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+function dispoDlg(p){const sv=C.services.filter(z=>z.nom!=='Pause'),d=$('dlg'),dp=p.dispo||{};
+  d.innerHTML=`<form><h3>Disponibilités théoriques — ${esc(pcan(p))}</h3><table class="pt"><tr><th class="nm"></th>${DJC.map(x=>`<th>${x}</th>`).join('')}<th></th></tr>${sv.map(z=>`<tr><td class="nm">${esc(z.nom)}</td>${DJC.map((_,i)=>`<td><input type="checkbox" name="d" value="${i+1}|${esc(z.nom)}"${(dp[i+1]||[]).includes(z.nom)?' checked':''} aria-label="${DJC[i]} ${esc(z.nom)}"></td>`).join('')}<td><button type="button" class="s" data-a="dsvRow" data-s="${esc(z.nom)}">Tous les jours</button></td></tr>`).join('')}</table>
+  <p><button type="button" class="s" data-a="dsvAll">Tout cocher</button> <button type="button" class="s" data-a="dsvNone">Tout décocher</button></p><p id="ferr" role="alert" class="er"></p><p><button>Enregistrer</button> <button type="button" class="s" data-a="close">Annuler</button></p></form>`;
+  const fm=d.querySelector('form');fm.onsubmit=async e=>{e.preventDefault();$('ferr').textContent='';const sel={};fm.querySelectorAll('input[name=d]:checked').forEach(i=>{const[n,s]=i.value.split('|');(sel[n]=sel[n]||[]).push(s)});
+    try{await commit(async ctx=>{const q=(await ctx.pool()).pool.find(x=>x.mat===p.mat);if(!q)throw new Error('Agent introuvable.');q.dispo=sel;return{pool:1,action:'Pool : disponibilités',objet:q.mat,details:pcan(q)+' : '+Object.values(sel).reduce((n,a)=>n+a.length,0)+' créneaux'}});d.close()}catch(x){$('ferr').textContent=x.message}};
+  d.showModal()}
+function vCap(){const mon=wkMon(S.cw),days=Array.from({length:7},(_,i)=>{const d=new Date(mon+'T12:00');d.setDate(d.getDate()+i);return ymd(d)}),svs=C.services.filter(z=>z.nom!=='Pause'),pool=PL().filter(p=>p.actif!==false);
+  const dn=d=>(new Date(d+'T12:00').getDay()+6)%7+1,av=(d,s)=>pool.filter(p=>((p.dispo||{})[dn(d)]||[]).includes(s));
+  const pl=(d,s)=>{const m=new Map();D.gardes.forEach(g=>g.services.forEach(v=>{if(v.type!==s)return;v.aff.forEach(a=>{if(ymd(new Date(T(a.debut)))===d)m.set((a.mat||a.agent||'').toLowerCase(),a.agent||a.mat)})}));return m};
+  const rows=svs.map(z=>`<tr><td class="nm">${esc(z.nom)} <span class="m">${z.debut&&z.fin?z.debut+'–'+z.fin:''}</span></td>${days.map(d=>{const a=av(d,z.nom).length,q=pl(d,z.nom).size,k=d+'|'+z.nom,cls=!a&&!q?'cz':q>a?'cbad':q===a?'cwn':'cok';
+    return`<td class="${cls}" data-a="capSel" data-k="${esc(k)}" tabindex="0" role="button" title="${q} planifié(s) sur ${a} disponible(s)"${S.capSel===k?' style="outline:2px solid var(--b)"':''}>${q} / ${a}</td>`}).join('')}</tr>`).join('');
+  const tot=days.map(d=>{let a=0,q=0;svs.forEach(z=>{a+=av(d,z.nom).length;q+=pl(d,z.nom).size});return`<td><b>${q} / ${a}</b></td>`}).join('');
+  let det='';if(S.capSel){const[d,sn]=S.capSel.split('|'),A=av(d,sn),Pm=pl(d,sn),ks=new Set(A.map(p=>p.mat.toLowerCase())),ex=[...Pm].filter(([k])=>!ks.has(k));
+    det=`<div class="c"><h3>${dnl(d)} — ${esc(sn)}</h3><p><b>${A.length}</b> agent(s) disponible(s) en théorie, <b>${Pm.size}</b> planifié(s).</p><ul>${A.map(p=>{const on=Pm.has(p.mat.toLowerCase());return`<li>${on?'✓':'○'} ${esc(pcan(p))} <span class="m">${on?'planifié':'disponible, non planifié'}</span></li>`}).join('')||'<li class="m">Aucun agent déclaré disponible.</li>'}</ul>${ex.length?`<p class="m">Planifiés hors disponibilités déclarées : ${ex.map(([,n])=>esc(n)).join(', ')}</p>`:''}</div>`}
+  return`<div class="c"><h2>Capacités théoriques de la semaine</h2><div class="fl"><button class="s" data-a="capNav" data-d="-1" aria-label="Semaine précédente">◂</button><label>Semaine du <input type="date" data-f="cw" value="${mon}"></label><button class="s" data-a="capNav" data-d="1" aria-label="Semaine suivante">▸</button><button class="s" data-a="capNav" data-d="0">Cette semaine</button></div>
+  <div style="overflow-x:auto"><table class="pt cp"><tr><th class="nm">Service</th>${days.map(d=>`<th>${dnl(d).slice(0,3)}<br><span class="m">${d.slice(8)}.${d.slice(5,7)}</span></th>`).join('')}</tr>${rows}<tr><td class="nm"><b>Total des créneaux</b></td>${tot}</tr></table></div>
+  <p class="m">Chaque case affiche : agents planifiés / agents disponibles en théorie (disponibilités saisies dans Administration, Pool d’agents ; seuls les agents actifs comptent). Vert : marge ; orange : tous les agents disponibles sont planifiés ; rouge : plus d’agents planifiés que de disponibles. Cliquez sur une case pour voir les agents.</p></div>${det}`}
 function uiForm(){const u=UI(),f=(k,l)=>`<label>${l} <input type="number" style="width:76px" data-ui="${k}" min="${UIR[k][0]}" max="${UIR[k][1]}" value="${u[k]}"> <span class="m">px</span></label>`;
   return`<h3>Affichage (appliqué à tous les postes)</h3><div class="fl">${f('police','Police générale')}${f('barre','Hauteur des barres de garde')}${f('service','Hauteur des barres de service')}${f('libelle','Largeur de la colonne des libellés')}${f('panneau','Largeur du panneau latéral')}${f('horloge','Taille de l’horloge')}</div><p><button class="s" data-a="rstUi">Rétablir les valeurs par défaut</button></p>`}
 function vAdmin(){
@@ -690,7 +781,11 @@ function render(){
   $('tadm').style.display=adm()?'':'none';
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===S.view));
   $('n1').textContent='('+D.gardes.filter(g=>g.statut==='en_cours').length+')';$('n2').textContent='('+D.gardes.filter(g=>g.statut==='a_traiter').length+')';
-  ap.innerHTML=`<div>${{dash:vDash,cours:vCours,traiter:vTraiter,hist:vHist,admin:vAdmin}[S.view]()}</div><aside>${detail()}</aside>`;
+  if(S.view==='cap'&&!rw())S.view='dash';$('tcap').style.display=rw()?'':'none';const pv=['piq','plan','cad','cap'].includes(S.view),miss=pqMissing(ymd(new Date()).slice(0,7)),pa=$('pqalert');
+  $('n3').textContent=miss.length?'⚠'+miss.length:'';pa.style.display=miss.length?'block':'none';
+  if(miss.length)pa.innerHTML=`⚠ Piquet d’encadrement non défini pour ${miss.length} jour${miss.length>1?'s':''} du mois en cours : ${miss.slice(0,8).map(d=>d.slice(8)+'.'+d.slice(5,7)).join(', ')}${miss.length>8?'…':''} <button class="s" data-a="go" data-v="piq">Voir</button>${rw()?' <button class="s" data-a="go" data-v="plan">Ouvrir le planning</button>':''}`;
+  ap.classList.toggle('wide',pv);pb.style.display=D&&!pv?'':'none';
+  ap.innerHTML=`<div>${{dash:vDash,cours:vCours,traiter:vTraiter,hist:vHist,piq:vPiq,plan:vPlan,cad:vCad,cap:vCap,admin:vAdmin}[S.view]()}</div>${pv?'':`<aside>${detail()}</aside>`}`;
 }
 
 /* ===== Actualisation périodique ===== */
